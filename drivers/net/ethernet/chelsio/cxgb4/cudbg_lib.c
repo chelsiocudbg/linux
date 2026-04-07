@@ -713,9 +713,9 @@ int cudbg_fill_meminfo(struct adapter *padap,
 	md->limit = 0;
 	md++;
 
-	md->base = padap->vres.ocq.start;
-	if (padap->vres.ocq.size)
-		md->limit = md->base + padap->vres.ocq.size - 1;
+	md->base = padap->uld_inst.vres.ocq.start;
+	if (padap->uld_inst.vres.ocq.size)
+		md->limit = md->base + padap->uld_inst.vres.ocq.size - 1;
 	else
 		md->idx = ARRAY_SIZE(cudbg_region);  /* hide it */
 	md++;

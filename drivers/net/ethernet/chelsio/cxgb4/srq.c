@@ -55,7 +55,7 @@ void do_srq_table_rpl(struct adapter *adap,
 		      const struct cpl_srq_table_rpl *rpl)
 {
 	unsigned int idx = TID_TID_G(GET_TID(rpl));
-	struct srq_data *s = adap->srq;
+	struct srq_data *s = adap->uld_inst.srq;
 	struct srq_entry *e;
 
 	if (unlikely(rpl->status != CPL_CONTAINS_READ_RPL)) {

@@ -1345,7 +1345,7 @@ static inline void t6_fill_tnl_lso(struct sk_buff *skb,
 		 htons(CPL_TX_TNL_LSO_TNLHDRLEN_V(val) |
 		       CPL_TX_TNL_LSO_TNLTYPE_V(tnl_type));
 
-	tnl_lso->r1 = 0;
+// __SS__	tnl_lso->r1 = 0;
 
 	val = CPL_TX_TNL_LSO_ETHHDRLEN_V(in_eth_xtra_len / 4) |
 	      CPL_TX_TNL_LSO_IPV6_V(inner_ip_hdr(skb)->version == 6) |
@@ -3496,7 +3496,7 @@ static noinline int t4_systim_to_hwstamp(struct adapter *adapter,
 
 	cpl = (struct cpl_rx_mps_pkt *)skb->data;
 	if (!(CPL_RX_MPS_PKT_TYPE_G(ntohl(cpl->op_to_r1_hi)) &
-	     X_CPL_RX_MPS_PKT_TYPE_PTP))
+	     CPL_RX_MPS_PKT_TYPE_PTP_X))
 		return RX_PTP_PKT_ERR;
 
 	data = skb->data + sizeof(*cpl);

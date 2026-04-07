@@ -1304,13 +1304,13 @@ static ssize_t mbox_write(struct file *file, const char __user *buf,
 	addr = adap->regs + PF_REG(mbox, CIM_PF_MAILBOX_DATA_A);
 	ctrl = addr + MBOX_LEN;
 
-	if (MBOWNER_G(readl(ctrl)) != X_MBOWNER_PL)
+	if (MBOWNER_G(readl(ctrl)) != MBOWNER_PL_X)
 		return -EBUSY;
 
 	for (i = 0; i < 8; i++)
 		writeq(data[i], addr + 8 * i);
 
-	writel(MBMSGVALID_F | MBOWNER_V(X_MBOWNER_FW), ctrl);
+	writel(MBMSGVALID_F | MBOWNER_V(MBOWNER_FW_X), ctrl);
 	return count;
 }
 

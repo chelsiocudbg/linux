@@ -51,16 +51,21 @@ enum {
 	NTX_SCHED       = 8,    /* # of HW Tx scheduling queues */
 	PM_NSTATS       = 5,    /* # of PM stats */
 	T6_PM_NSTATS    = 7,    /* # of PM stats in T6 */
+	T7_PM_RX_CACHE_NSTATS = 27, /* # of PM Rx Cache stats in T7 */
 	MBOX_LEN        = 64,   /* mailbox size in bytes */
 	TRACE_LEN       = 112,  /* length of trace data and mask */
 	FILTER_OPT_LEN  = 36,   /* filter tuple width for optional components */
+	MAX_UP_CORES = 8, 	/* Max # of uP cores that can be enabled */
 };
 
 enum {
 	CIM_NUM_IBQ    = 6,     /* # of CIM IBQs */
+	CIM_NUM_IBQ_T7 = 16,    /* # of CIM IBQs for T7 */
 	CIM_NUM_OBQ    = 6,     /* # of CIM OBQs */
 	CIM_NUM_OBQ_T5 = 8,     /* # of CIM OBQs for T5 adapter */
-	CIMLA_SIZE     = 2048,  /* # of 32-bit words in CIM LA */
+	CIM_NUM_OBQ_T7 = 16,    /* # of CIM OBQs for T7 adapter */
+	CIMLA_SIZE     = (256 * 8),  /* 256 rows * ceil(235/32) 32-bit words */
+	CIMLA_SIZE_T6  = (256 * 10), /* 256 rows * ceil(311/32) 32-bit words */
 	CIM_PIFLA_SIZE = 64,    /* # of 192-bit words in CIM PIF LA */
 	CIM_MALA_SIZE  = 64,    /* # of 160-bit words in CIM MA LA */
 	CIM_IBQ_SIZE   = 128,   /* # of 128-bit words in a CIM IBQ */
@@ -89,6 +94,7 @@ enum { MBOX_OWNER_NONE, MBOX_OWNER_FW, MBOX_OWNER_DRV };    /* mailbox owners */
 enum {
 	SGE_MAX_WR_LEN = 512,     /* max WR size in bytes */
 	SGE_CTXT_SIZE = 24,       /* size of SGE context */
+	SGE_CTXT_SIZE_T7 = 28,    /* size of SGE context for T7 */
 	SGE_NTIMERS = 6,          /* # of interrupt holdoff timer values */
 	SGE_NCOUNTERS = 4,        /* # of interrupt packet counter values */
 	SGE_NDBQTIMERS = 8,       /* # of Doorbell Queue Timer values */
@@ -192,6 +198,18 @@ struct rsp_ctrl {
 #define QINTR_TIMER_IDX_V(x) ((x) << QINTR_TIMER_IDX_S)
 #define QINTR_TIMER_IDX_G(x) (((x) >> QINTR_TIMER_IDX_S) & QINTR_TIMER_IDX_M)
 
+#define ARM_QTYPE_S    11
+#define ARM_QTYPE_M    1
+#define ARM_QTYPE_V(x) ((x) << ARM_QTYPE_S)
+
+#define ARM_PIDX_S    0
+#define ARM_PIDX_M    0x7ffU
+#define ARM_PIDX_V(x) ((x) << ARM_PIDX_S)
+
+#define ARM_CIDXINC_S    0
+#define ARM_CIDXINC_M    0x7ffU
+#define ARM_CIDXINC_V(x) ((x) << ARM_CIDXINC_S)
+
 /*
  * Flash layout.
  */
@@ -280,8 +298,10 @@ enum {
 	 */
 };
 
-#undef FLASH_START
-#undef FLASH_MAX_SIZE
+struct t4_flash_loc_entry {
+        u16 start_sec;
+        u16 nsecs;
+};
 
 #define SGE_TIMESTAMP_S 0
 #define SGE_TIMESTAMP_M 0xfffffffffffffffULL

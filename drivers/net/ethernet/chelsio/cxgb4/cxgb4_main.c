@@ -2261,7 +2261,7 @@ int cxgb4_read_tpte(struct net_device *dev, u32 stag, __be32 *tpte)
 
 	adap = netdev2adap(dev);
 
-	offset = ((stag >> 8) * 32) + adap->vres.stag.start;
+	offset = ((stag >> 8) * 32) + adap->uld_inst.vres.stag.start;
 
 	/* Figure out where the offset lands in the Memory Type/Address scheme.
 	 * This code assumes that the memory is laid out starting at offset 0
@@ -2483,7 +2483,7 @@ static void enable_dbs(struct adapter *adap)
 
 static void notify_rdma_uld(struct adapter *adap, enum cxgb4_control cmd)
 {
-	enum cxgb4_uld type = CXGB4_ULD_RDMA;
+	enum cxgb4_uld_type type = CXGB4_ULD_RDMA;
 
 	if (adap->uld && adap->uld[type].handle)
 		adap->uld[type].control(adap->uld[type].handle, cmd);
@@ -3949,20 +3949,20 @@ static void setup_memwin(struct adapter *adap)
 
 static void setup_memwin_rdma(struct adapter *adap)
 {
-	if (adap->vres.ocq.size) {
+	if (adap->uld_inst.vres.ocq.size) {
 		u32 start;
 		unsigned int sz_kb;
 
 		start = t4_read_pcie_cfg4(adap, PCI_BASE_ADDRESS_2);
 		start &= PCI_BASE_ADDRESS_MEM_MASK;
-		start += OCQ_WIN_OFFSET(adap->pdev, &adap->vres);
-		sz_kb = roundup_pow_of_two(adap->vres.ocq.size) >> 10;
+		start += OCQ_WIN_OFFSET(adap->pdev, &adap->uld_inst.vres);
+		sz_kb = roundup_pow_of_two(adap->uld_inst.vres.ocq.size) >> 10;
 		t4_write_reg(adap,
 			     PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_BASE_WIN_A, 3),
 			     start | BIR_V(1) | WINDOW_V(ilog2(sz_kb)));
 		t4_write_reg(adap,
 			     PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_OFFSET_A, 3),
-			     adap->vres.ocq.start);
+			     adap->uld_inst.vres.ocq.start);
 		t4_read_reg(adap,
 			    PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_OFFSET_A, 3));
 	}
@@ -5195,8 +5195,8 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 			adap->tids.nftids = adap->tids.sftid_base -
 						adap->tids.ftid_base;
 		}
-		adap->vres.ddp.start = val[3];
-		adap->vres.ddp.size = val[4] - val[3] + 1;
+		adap->uld_inst.vres.ddp.start = val[3];
+		adap->uld_inst.vres.ddp.size = val[4] - val[3] + 1;
 		adap->params.ofldq_wr_cred = val[5];
 
 		if (caps_cmd.niccaps & htons(FW_CAPS_CONFIG_NIC_HASHFILTER)) {
@@ -5229,24 +5229,24 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 				      params, val);
 		if (ret < 0)
 			goto bye;
-		adap->vres.stag.start = val[0];
-		adap->vres.stag.size = val[1] - val[0] + 1;
-		adap->vres.rq.start = val[2];
-		adap->vres.rq.size = val[3] - val[2] + 1;
-		adap->vres.pbl.start = val[4];
-		adap->vres.pbl.size = val[5] - val[4] + 1;
+		adap->uld_inst.vres.stag.start = val[0];
+		adap->uld_inst.vres.stag.size = val[1] - val[0] + 1;
+		adap->uld_inst.vres.rq.start = val[2];
+		adap->uld_inst.vres.rq.size = val[3] - val[2] + 1;
+		adap->uld_inst.vres.pbl.start = val[4];
+		adap->uld_inst.vres.pbl.size = val[5] - val[4] + 1;
 
 		params[0] = FW_PARAM_PFVF(SRQ_START);
 		params[1] = FW_PARAM_PFVF(SRQ_END);
 		ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2,
 				      params, val);
 		if (!ret) {
-			adap->vres.srq.start = val[0];
-			adap->vres.srq.size = val[1] - val[0] + 1;
+			adap->uld_inst.vres.srq.start = val[0];
+			adap->uld_inst.vres.srq.size = val[1] - val[0] + 1;
 		}
-		if (adap->vres.srq.size) {
-			adap->srq = t4_init_srq(adap->vres.srq.size);
-			if (!adap->srq)
+		if (adap->uld_inst.vres.srq.size) {
+			adap->uld_inst.srq = t4_init_srq(adap->uld_inst.vres.srq.size);
+			if (!adap->uld_inst.srq)
 				dev_warn(&adap->pdev->dev, "could not allocate SRQ, continuing\n");
 		}
 
@@ -5260,12 +5260,12 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 				      val);
 		if (ret < 0)
 			goto bye;
-		adap->vres.qp.start = val[0];
-		adap->vres.qp.size = val[1] - val[0] + 1;
-		adap->vres.cq.start = val[2];
-		adap->vres.cq.size = val[3] - val[2] + 1;
-		adap->vres.ocq.start = val[4];
-		adap->vres.ocq.size = val[5] - val[4] + 1;
+		adap->uld_inst.vres.qp.start = val[0];
+		adap->uld_inst.vres.qp.size = val[1] - val[0] + 1;
+		adap->uld_inst.vres.cq.start = val[2];
+		adap->uld_inst.vres.cq.size = val[3] - val[2] + 1;
+		adap->uld_inst.vres.ocq.start = val[4];
+		adap->uld_inst.vres.ocq.size = val[5] - val[4] + 1;
 
 		params[0] = FW_PARAM_DEV(MAXORDIRD_QP);
 		params[1] = FW_PARAM_DEV(MAXIRD_ADAPTER);
@@ -5304,22 +5304,22 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 				      params, val);
 		if (ret < 0)
 			goto bye;
-		adap->vres.iscsi.start = val[0];
-		adap->vres.iscsi.size = val[1] - val[0] + 1;
+		adap->uld_inst.vres.iscsi.start = val[0];
+		adap->uld_inst.vres.iscsi.size = val[1] - val[0] + 1;
 		if (is_t6(adap->params.chip)) {
 			params[0] = FW_PARAM_PFVF(PPOD_EDRAM_START);
 			params[1] = FW_PARAM_PFVF(PPOD_EDRAM_END);
 			ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2,
 					      params, val);
 			if (!ret) {
-				adap->vres.ppod_edram.start = val[0];
-				adap->vres.ppod_edram.size =
+				adap->uld_inst.vres.ppod_edram.start = val[0];
+				adap->uld_inst.vres.ppod_edram.size =
 					val[1] - val[0] + 1;
 
 				dev_info(adap->pdev_dev,
 					 "ppod edram start 0x%x end 0x%x size 0x%x\n",
 					 val[0], val[1],
-					 adap->vres.ppod_edram.size);
+					 adap->uld_inst.vres.ppod_edram.size);
 			}
 		}
 		/* LIO target and cxgb4i initiaitor */
@@ -5335,7 +5335,7 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 				if (ret != -EINVAL)
 					goto bye;
 			} else {
-				adap->vres.ncrypto_fc = val[0];
+				adap->uld_inst.vres.ncrypto_fc = val[0];
 			}
 			adap->num_ofld_uld += 1;
 		}
@@ -5347,8 +5347,8 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 					      2, params, val);
 			if (ret < 0)
 				goto bye;
-			adap->vres.key.start = val[0];
-			adap->vres.key.size = val[1] - val[0] + 1;
+			adap->uld_inst.vres.key.start = val[0];
+			adap->uld_inst.vres.key.size = val[1] - val[0] + 1;
 			adap->num_uld += 1;
 		}
 		adap->params.crypto = ntohs(caps_cmd.cryptocaps);
@@ -6162,7 +6162,7 @@ static void free_some_resources(struct adapter *adapter)
 
 	kvfree(adapter->smt);
 	kvfree(adapter->l2t);
-	kvfree(adapter->srq);
+	kvfree(adapter->uld_inst.srq);
 	t4_cleanup_sched(adapter);
 	kvfree(adapter->tids.tid_tab);
 	cxgb4_cleanup_tc_matchall(adapter);

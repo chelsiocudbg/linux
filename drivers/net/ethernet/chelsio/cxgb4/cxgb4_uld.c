@@ -290,7 +290,7 @@ static int cfg_queues_uld(struct adapter *adap, unsigned int uld_type,
 		r->fl.size = 72;
 	}
 
-	ciq_size = 64 + adap->vres.cq.size + adap->tids.nftids;
+	ciq_size = 64 + adap->uld_inst.vres.cq.size + adap->tids.nftids;
 	if (ciq_size > SGE_MAX_IQ_SIZE) {
 		dev_warn(adap->pdev_dev, "CIQ size too small for available IQs\n");
 		ciq_size = SGE_MAX_IQ_SIZE;
@@ -475,7 +475,7 @@ setup_sge_txq_uld(struct adapter *adap, unsigned int uld_type,
 	if (!txq_info)
 		return -ENOMEM;
 	if (uld_type == CXGB4_ULD_CRYPTO) {
-		i = min_t(int, adap->vres.ncrypto_fc,
+		i = min_t(int, adap->uld_inst.vres.ncrypto_fc,
 			  num_online_cpus());
 		txq_info->ntxq = rounddown(i, adap->params.nports);
 		if (txq_info->ntxq <= 0) {
@@ -553,7 +553,7 @@ void t4_uld_mem_free(struct adapter *adap)
 }
 
 /* This function should be called with uld_mutex taken. */
-static void cxgb4_shutdown_uld_adapter(struct adapter *adap, enum cxgb4_uld type)
+static void cxgb4_shutdown_uld_adapter(struct adapter *adap, enum cxgb4_uld_type type)
 {
 	if (adap->uld[type].handle) {
 		adap->uld[type].handle = NULL;
@@ -597,17 +597,17 @@ static void uld_init(struct adapter *adap, struct cxgb4_lld_info *lld)
 	lld->l2t = adap->l2t;
 	lld->tids = &adap->tids;
 	lld->ports = adap->port;
-	lld->vr = &adap->vres;
+	lld->vr = &adap->uld_inst.vres;
 	lld->mtus = adap->params.mtus;
 	lld->nchan = adap->params.nports;
 	lld->nports = adap->params.nports;
 	lld->wr_cred = adap->params.ofldq_wr_cred;
-	lld->crypto = adap->params.crypto;
+	lld->ulp_crypto = adap->params.crypto;
 	lld->iscsi_iolen = MAXRXDATA_G(t4_read_reg(adap, TP_PARA_REG2_A));
 	lld->iscsi_tagmask = t4_read_reg(adap, ULP_RX_ISCSI_TAGMASK_A);
 	lld->iscsi_pgsz_order = t4_read_reg(adap, ULP_RX_ISCSI_PSZ_A);
 	lld->iscsi_llimit = t4_read_reg(adap, ULP_RX_ISCSI_LLIMIT_A);
-	lld->iscsi_ppm = &adap->iscsi_ppm;
+	lld->iscsi_ppm = &adap->uld_inst.iscsi_ppm;
 	lld->adapter_type = adap->params.chip;
 	lld->cclk_ps = 1000000000 / adap->params.vpd.cclk;
 	lld->udb_density = 1 << adap->params.sge.eq_qpp;
@@ -722,7 +722,7 @@ int cxgb4_set_ktls_feature(struct adapter *adap, bool enable)
 #endif
 
 static void cxgb4_uld_alloc_resources(struct adapter *adap,
-				      enum cxgb4_uld type,
+				      enum cxgb4_uld_type type,
 				      const struct cxgb4_uld_info *p)
 {
 	int ret = 0;
@@ -790,7 +790,7 @@ void cxgb4_uld_enable(struct adapter *adap)
  * Registers an upper-layer driver with this driver and notifies the ULD
  * about any presently available devices that support its type.
  */
-void cxgb4_register_uld(enum cxgb4_uld type,
+void cxgb4_register_uld(enum cxgb4_uld_type type,
 			const struct cxgb4_uld_info *p)
 {
 	struct cxgb4_uld_list *uld_entry;
@@ -821,7 +821,7 @@ EXPORT_SYMBOL(cxgb4_register_uld);
  *
  *	Unregisters an existing upper-layer driver.
  */
-int cxgb4_unregister_uld(enum cxgb4_uld type)
+int cxgb4_unregister_uld(enum cxgb4_uld_type type)
 {
 	struct cxgb4_uld_list *uld_entry, *tmp;
 	struct adapter *adap;
