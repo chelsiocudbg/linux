@@ -231,10 +231,14 @@ struct filter_entry {
 
 #define WORD_MASK	0xffffffff
 
+struct cpl_set_tcb_rpl;
+struct cpl_act_open_rpl;
+struct cpl_abort_rpl_rss;
+
 void filter_rpl(struct adapter *adap, const struct cpl_set_tcb_rpl *rpl);
 void hash_filter_rpl(struct adapter *adap, const struct cpl_act_open_rpl *rpl);
 void hash_del_filter_rpl(struct adapter *adap,
-			 const struct cpl_abort_rpl_rss *rpl);
+                        const struct cpl_abort_rpl_rss *rpl);
 void clear_filter(struct adapter *adap, struct filter_entry *f);
 
 int set_filter_wr(struct adapter *adapter, int fidx);
@@ -244,7 +248,28 @@ int writable_filter(struct filter_entry *f);
 void clear_all_filters(struct adapter *adapter);
 void init_hash_filter(struct adapter *adap);
 bool is_filter_exact_match(struct adapter *adap,
-			   struct ch_filter_specification *fs);
+                           struct ch_filter_specification *fs);
 void cxgb4_cleanup_ethtool_filters(struct adapter *adap);
 int cxgb4_init_ethtool_filters(struct adapter *adap);
+
+
+int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
+                              __be32 sip, __be16 sport, __be16 vlan,
+                              unsigned int queue,
+                              unsigned char port, unsigned char mask);
+int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
+                              unsigned int queue, bool ipv6);
+
+int __cxgb4_set_filter(struct net_device *dev, int filter_id,
+                      struct ch_filter_specification *fs,
+                      struct filter_ctx *ctx);
+int __cxgb4_del_filter(struct net_device *dev, int filter_id,
+                      struct ch_filter_specification *fs,
+                      struct filter_ctx *ctx);
+int cxgb4_set_filter(struct net_device *dev, int filter_id,
+                    struct ch_filter_specification *fs);
+int cxgb4_del_filter(struct net_device *dev, int filter_id,
+                    struct ch_filter_specification *fs);
+int cxgb4_get_filter_counters(struct net_device *dev, unsigned int fidx,
+                             u64 *hitcnt, u64 *bytecnt, bool hash);
 #endif /* __CXGB4_FILTER_H */

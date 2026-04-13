@@ -178,7 +178,7 @@ enum cc_fec {
 	FEC_AUTO      = 1 << 0,	 /* IEEE 802.3 "automatic" */
 	FEC_RS        = 1 << 1,  /* Reed-Solomon */
 	FEC_BASER_RS  = 1 << 2,  /* BaseR/Reed-Solomon */
-       FEC_FORCE     = 1 << 3	 /* Forcefully set FEC */
+	FEC_FORCE     = 1 << 3	 /* Forcefully set FEC */
 };
 
 enum {
@@ -763,12 +763,12 @@ struct port_info {
 	u16 nmirrorqsets;
 	u32 vi_mirror_count;
 	u16 toe_ctrlq[MAX_UP_CORES];
-       u16 rdma_ctrlq[MAX_UP_CORES];
-       u16 iscsi_ctrlq[MAX_UP_CORES];
-       u16 iscsit_ctrlq[MAX_UP_CORES];
-       u16 nvmeh_ctrlq[MAX_UP_CORES];
-       u16 nvmet_ctrlq[MAX_UP_CORES];
-       u16 cstor_ctrlq[MAX_UP_CORES];
+	u16 rdma_ctrlq[MAX_UP_CORES];
+	u16 iscsi_ctrlq[MAX_UP_CORES];
+	u16 iscsit_ctrlq[MAX_UP_CORES];
+	u16 nvmeh_ctrlq[MAX_UP_CORES];
+	u16 nvmet_ctrlq[MAX_UP_CORES];
+	u16 cstor_ctrlq[MAX_UP_CORES];
 	struct mutex vi_mirror_mutex; /* Sync access to Mirror VI info */
 	struct cxgb4_ethtool_lb_test ethtool_lb;
 };
@@ -779,8 +779,8 @@ struct work_struct;
 enum {                                 /* adapter flags */
 	CXGB4_FULL_INIT_DONE		= (1 << 0),
 	CXGB4_DEV_ENABLED		= (1 << 1),
-	CXGB4_USING_MSI			= (1 << 2),
-	CXGB4_USING_MSIX		= (1 << 3),
+	CXGB4_USING_INTR_SINGLE		= (1 << 2),
+	CXGB4_USING_INTR_MULTI		= (1 << 3),
 	CXGB4_FW_OK			= (1 << 4),
 	CXGB4_RSS_TNLALLLOOKUP		= (1 << 5),
 	CXGB4_USING_SOFT_PARAMS		= (1 << 6),
@@ -1703,10 +1703,10 @@ int t4_sge_alloc_rxq(struct adapter *adap, struct sge_rspq *iq, bool fwevtq,
 		     rspq_flush_handler_t flush_handler, int cong);
 int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,
 			 struct net_device *dev, struct netdev_queue *netdevq,
-			 unsigned int iqid, u8 dbqt);
+			 unsigned int iqid, u8 dbqt, int index);
 int t4_sge_alloc_ctrl_txq(struct adapter *adap, struct sge_ctrl_txq *txq,
 			  struct net_device *dev, unsigned int iqid,
-			  unsigned int cmplqid);
+			  unsigned int cmplqid, int index);
 int t4_sge_mod_ctrl_txq(struct adapter *adap, unsigned int eqid,
 			unsigned int cmplqid);
 int t4_sge_alloc_uld_txq(struct adapter *adap, struct sge_uld_txq *txq,
@@ -2230,6 +2230,8 @@ int t4_i2c_rd(struct adapter *adap, unsigned int mbox, int port,
 	      unsigned int len, u8 *buf);
 int t4_load_boot(struct adapter *adap, u8 *boot_data,
 		 unsigned int boot_addr, unsigned int size);
+int t4_load_uboot(struct adapter *adap, const u8 *uboot_data,
+                  unsigned int size);
 int t4_load_bootcfg(struct adapter *adap,
 		    const u8 *cfg_data, unsigned int size);
 void free_rspq_fl(struct adapter *adap, struct sge_rspq *rq, struct sge_fl *fl);

@@ -168,13 +168,6 @@ static inline void cxgb4_uld_skb_set_queue(struct sk_buff *skb, u16 queue)
        skb_set_queue_mapping(skb, queue);
 }
 
-int cxgb4_alloc_atid(struct tid_info *t, void *data);
-int cxgb4_alloc_stid(struct tid_info *t, int family, void *data);
-int cxgb4_alloc_sftid(struct tid_info *t, int family, void *data);
-void cxgb4_free_atid(struct tid_info *t, unsigned int atid);
-void cxgb4_free_stid(struct tid_info *t, unsigned int stid, int family);
-void cxgb4_remove_tid(struct tid_info *t, unsigned int qid, unsigned int tid,
-		      unsigned short family);
 struct in6_addr;
 
 int cxgb4_create_server(const struct net_device *dev, unsigned int stid,
@@ -185,27 +178,6 @@ int cxgb4_create_server6(const struct net_device *dev, unsigned int stid,
 			 unsigned int queue);
 int cxgb4_remove_server(const struct net_device *dev, unsigned int stid,
 			unsigned int queue, bool ipv6);
-int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
-			       __be32 sip, __be16 sport, __be16 vlan,
-			       unsigned int queue,
-			       unsigned char port, unsigned char mask);
-int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
-			       unsigned int queue, bool ipv6);
-
-int cxgb4_get_free_ftid(struct net_device *dev, u8 family, bool hash_en,
-			u32 tc_prio);
-int __cxgb4_set_filter(struct net_device *dev, int filter_id,
-		       struct ch_filter_specification *fs,
-		       struct filter_ctx *ctx);
-int __cxgb4_del_filter(struct net_device *dev, int filter_id,
-		       struct ch_filter_specification *fs,
-		       struct filter_ctx *ctx);
-int cxgb4_set_filter(struct net_device *dev, int filter_id,
-		     struct ch_filter_specification *fs);
-int cxgb4_del_filter(struct net_device *dev, int filter_id,
-		     struct ch_filter_specification *fs);
-int cxgb4_get_filter_counters(struct net_device *dev, unsigned int fidx,
-			      u64 *hitcnt, u64 *bytecnt, bool hash);
 
 static inline void set_wr_txq(struct sk_buff *skb, int prio, int queue)
 {

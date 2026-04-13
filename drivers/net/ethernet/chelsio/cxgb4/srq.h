@@ -57,7 +57,8 @@ struct srq_data {
 	struct mutex lock; /* generic mutex for srq data */
 };
 
-struct srq_data *t4_init_srq(int srq_size);
+int cxgb4_srq_init(struct adapter *adap, u32 srq_size);
+void cxgb4_srq_cleanup(struct adapter *adap);
 void do_srq_table_rpl(struct adapter *adap,
 		      const struct cpl_srq_table_rpl *rpl);
 #endif  /* __CXGB4_SRQ_H */

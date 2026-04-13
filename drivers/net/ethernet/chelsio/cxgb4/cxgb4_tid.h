@@ -167,6 +167,16 @@ static inline void cxgb4_free_eotid(struct tid_info *t, u32 eotid)
        atomic_dec(&t->eotids_in_use);
  }
 
+int cxgb4_alloc_atid(struct tid_info *t, void *data);
+int cxgb4_alloc_stid(struct tid_info *t, int family, void *data);
+int cxgb4_alloc_sftid(struct tid_info *t, int family, void *data);
+void cxgb4_free_atid(struct tid_info *t, unsigned int atid);
+void cxgb4_free_stid(struct tid_info *t, unsigned int stid, int family);
+void cxgb4_remove_tid(struct tid_info *t, unsigned int qid, unsigned int tid,
+                     unsigned short family);
+int cxgb4_get_free_ftid(struct net_device *dev, u8 family, bool hash_en,
+                       u32 tc_prio);
+
 //END -----------------------old changes for comptability with other drivers --------------END
 struct cxgb4_tid_info_xarray {
        struct xarray tid_tab;

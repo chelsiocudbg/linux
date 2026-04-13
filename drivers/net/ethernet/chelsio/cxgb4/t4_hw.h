@@ -213,89 +213,130 @@ struct rsp_ctrl {
 /*
  * Flash layout.
  */
+#if 0
+// __SS__ commenting for now
 #define FLASH_START(start)	((start) * SF_SEC_SIZE)
 #define FLASH_MAX_SIZE(nsecs)	((nsecs) * SF_SEC_SIZE)
 
+//BEGIN------------- Keep old enum values unchanged for compatibility with ULDs -------------BEGIN
 enum {
+    FLASH_FW_START_SEC = 8,
+    FLASH_FW_NSECS = 16,
+    FLASH_FW_START = FLASH_START(FLASH_FW_START_SEC),
+    FLASH_FW_MAX_SIZE = FLASH_MAX_SIZE(FLASH_FW_NSECS),
+
+    FLASH_CFG_START_SEC = 31,
+    FLASH_CFG_NSECS = 1,
+    FLASH_CFG_START = FLASH_START(FLASH_CFG_START_SEC),
+    FLASH_CFG_MAX_SIZE = FLASH_MAX_SIZE(FLASH_CFG_NSECS),
+
+    FLASH_MIN_SIZE = FLASH_CFG_START + FLASH_CFG_MAX_SIZE,
+};
+//END------------- Keep old enum values unchanged for compatibility with ULDs -------------BEGIN
+#endif
+
+enum t4_flash_loc {
 	/*
 	 * Various Expansion-ROM boot images, etc.
 	 */
-	FLASH_EXP_ROM_START_SEC = 0,
-	FLASH_EXP_ROM_NSECS = 6,
-	FLASH_EXP_ROM_START = FLASH_START(FLASH_EXP_ROM_START_SEC),
-	FLASH_EXP_ROM_MAX_SIZE = FLASH_MAX_SIZE(FLASH_EXP_ROM_NSECS),
+	FLASH_LOC_EXP_ROM = 0,
 
 	/*
 	 * iSCSI Boot Firmware Table (iBFT) and other driver-related
 	 * parameters ...
 	 */
-	FLASH_IBFT_START_SEC = 6,
-	FLASH_IBFT_NSECS = 1,
-	FLASH_IBFT_START = FLASH_START(FLASH_IBFT_START_SEC),
-	FLASH_IBFT_MAX_SIZE = FLASH_MAX_SIZE(FLASH_IBFT_NSECS),
+	FLASH_LOC_IBFT,
 
 	/*
 	 * Boot configuration data.
 	 */
-	FLASH_BOOTCFG_START_SEC = 7,
-	FLASH_BOOTCFG_NSECS = 1,
-	FLASH_BOOTCFG_START = FLASH_START(FLASH_BOOTCFG_START_SEC),
-	FLASH_BOOTCFG_MAX_SIZE = FLASH_MAX_SIZE(FLASH_BOOTCFG_NSECS),
+	FLASH_LOC_BOOTCFG,
 
 	/*
 	 * Location of firmware image in FLASH.
 	 */
-	FLASH_FW_START_SEC = 8,
-	FLASH_FW_NSECS = 16,
-	FLASH_FW_START = FLASH_START(FLASH_FW_START_SEC),
-	FLASH_FW_MAX_SIZE = FLASH_MAX_SIZE(FLASH_FW_NSECS),
+	FLASH_LOC_FW,
 
 	/* Location of bootstrap firmware image in FLASH.
 	 */
-	FLASH_FWBOOTSTRAP_START_SEC = 27,
-	FLASH_FWBOOTSTRAP_NSECS = 1,
-	FLASH_FWBOOTSTRAP_START = FLASH_START(FLASH_FWBOOTSTRAP_START_SEC),
-	FLASH_FWBOOTSTRAP_MAX_SIZE = FLASH_MAX_SIZE(FLASH_FWBOOTSTRAP_NSECS),
+	FLASH_LOC_FWBOOTSTRAP,
 
 	/*
 	 * iSCSI persistent/crash information.
 	 */
-	FLASH_ISCSI_CRASH_START_SEC = 29,
-	FLASH_ISCSI_CRASH_NSECS = 1,
-	FLASH_ISCSI_CRASH_START = FLASH_START(FLASH_ISCSI_CRASH_START_SEC),
-	FLASH_ISCSI_CRASH_MAX_SIZE = FLASH_MAX_SIZE(FLASH_ISCSI_CRASH_NSECS),
+	FLASH_LOC_ISCSI_CRASH,
 
 	/*
 	 * FCoE persistent/crash information.
 	 */
-	FLASH_FCOE_CRASH_START_SEC = 30,
-	FLASH_FCOE_CRASH_NSECS = 1,
-	FLASH_FCOE_CRASH_START = FLASH_START(FLASH_FCOE_CRASH_START_SEC),
-	FLASH_FCOE_CRASH_MAX_SIZE = FLASH_MAX_SIZE(FLASH_FCOE_CRASH_NSECS),
+	FLASH_LOC_FCOE_CRASH,
+
+        /*
+         * Location of Firmware Configuration File in FLASH.
+         */
+        FLASH_LOC_CFG,
+
+        /*
+         * CUDBG chip dump.
+         */
+        FLASH_LOC_CUDBG,
+
+        /*
+         * FW chip dump.
+         */
+        FLASH_LOC_CHIP_DUMP,
+
+        /*
+         * DPU boot information store.
+         */
+        FLASH_LOC_DPU_BOOT,
+
+        /*
+         * DPU peristent information store.
+         */
+        FLASH_LOC_DPU_AREA,
+
+        /*
+         * VPD location.
+         */
+        FLASH_LOC_VPD,
 
 	/*
-	 * Location of Firmware Configuration File in FLASH.  Since the FPGA
-	 * "FLASH" is smaller we need to store the Configuration File in a
-	 * different location -- which will overlap the end of the firmware
-	 * image if firmware ever gets that large ...
+	 * Backup init/vpd.
 	 */
-	FLASH_CFG_START_SEC = 31,
-	FLASH_CFG_NSECS = 1,
-	FLASH_CFG_START = FLASH_START(FLASH_CFG_START_SEC),
-	FLASH_CFG_MAX_SIZE = FLASH_MAX_SIZE(FLASH_CFG_NSECS),
-
-	/* We don't support FLASH devices which can't support the full
-	 * standard set of sections which we need for normal
-	 * operations.
-	 */
-	FLASH_MIN_SIZE = FLASH_CFG_START + FLASH_CFG_MAX_SIZE,
-
-	FLASH_FPGA_CFG_START_SEC = 15,
-	FLASH_FPGA_CFG_START = FLASH_START(FLASH_FPGA_CFG_START_SEC),
+	FLASH_LOC_VPD_BACKUP,
 
 	/*
-	 * Sectors 32-63 are reserved for FLASH failover.
+	 * Sectors 32-63 for CUDBG.
+	 * Backup firmware image.
 	 */
+	FLASH_LOC_FW_BACKUP,
+
+	/*
+	 * Backup bootstrap firmware image.
+	 */
+	FLASH_LOC_FWBOOTSTRAP_BACKUP,
+
+	/*
+	 * Backup Location of Firmware Configuration File in FLASH.
+	 */
+	FLASH_LOC_CFG_BACK,
+
+        /*
+         * Helper to retrieve info that spans the entire Boot related area.
+         */
+        FLASH_LOC_BOOT_AREA,
+
+        /*
+         * Helper to determine minimum standard set of sections needed for
+         * normal operations.
+         */
+        FLASH_LOC_MIN_SIZE,
+
+        /*
+         * End of FLASH regions.
+         */
+        FLASH_LOC_END
 };
 
 struct t4_flash_loc_entry {
