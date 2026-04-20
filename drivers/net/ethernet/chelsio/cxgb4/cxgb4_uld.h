@@ -365,7 +365,7 @@ struct cxgb4_uld_txq {
 	struct sge_uld_txq *ofldtxq;
 	struct cxgb4_uld_txq_info info;
 	enum cxgb4_uld_txq_type qtype;
-	// __SS__ enum cxgb4_uld_type uld;
+	enum cxgb4_uld_type uld;
 	u32 users;
 	struct net_device *dev;
 	struct work_struct task_txq_free;

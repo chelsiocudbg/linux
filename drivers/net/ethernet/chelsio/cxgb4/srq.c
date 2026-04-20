@@ -36,19 +36,26 @@
 #include "t4_msg.h"
 #include "srq.h"
 
-struct srq_data *t4_init_srq(int srq_size)
+int cxgb4_srq_init(struct adapter *adap, u32 srq_size)
 {
 	struct srq_data *s;
 
 	s = kvzalloc_obj(*s);
 	if (!s)
-		return NULL;
+		return -ENOMEM;
 
 	s->srq_size = srq_size;
 	init_completion(&s->comp);
 	mutex_init(&s->lock);
 
-	return s;
+	adap->uld_inst.srq = s;
+	return 0;
+}
+
+void cxgb4_srq_cleanup(struct adapter *adap)
+{
+       kfree(adap->uld_inst.srq);
+       adap->uld_inst.srq = NULL;
 }
 
 void do_srq_table_rpl(struct adapter *adap,

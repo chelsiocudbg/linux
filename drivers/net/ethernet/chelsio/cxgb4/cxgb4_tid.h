@@ -208,6 +208,8 @@ struct cxgb4_tid_info {
        struct work_struct tid_release_task;
 };
 
+#if 0
+// __SS__ commenting for now
 unsigned int cxgb4_atid_in_use(struct adapter *adap);
 void *cxgb4_atid_lookup(struct adapter *adap, u32 atid);
 int cxgb4_atid_alloc(struct adapter *adap, void *data);
@@ -249,4 +251,5 @@ void cxgb4_uotid_free(struct adapter *adap, u32 uotid);
 void cxgb4_tid_info_cleanup(struct adapter *adap);
 int cxgb4_tid_info_init(struct adapter *adap,
                        const struct fw_caps_config_cmd *caps_cmd);
+#endif
 #endif /* __CXGB4_TID_H__ */

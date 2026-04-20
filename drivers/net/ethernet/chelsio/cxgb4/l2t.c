@@ -176,7 +176,7 @@ static void send_pending(struct adapter *adap, struct l2t_entry *e)
 	struct sk_buff *skb;
 
 	while ((skb = __skb_dequeue(&e->arpq)) != NULL)
-		t4_ofld_send(adap, skb);
+                cxgb4_uld_xmit(adap->port[0], skb);
 }
 
 /*
@@ -234,7 +234,7 @@ again:
 		spin_unlock_bh(&e->lock);
 		fallthrough;
 	case L2T_STATE_VALID:     /* fast-path, send the packet on */
-		return t4_ofld_send(adap, skb);
+                return cxgb4_uld_xmit(dev, skb);
 	case L2T_STATE_RESOLVING:
 	case L2T_STATE_SYNC_WRITE:
 		spin_lock_bh(&e->lock);
@@ -472,35 +472,49 @@ done:
 EXPORT_SYMBOL(cxgb4_l2t_get);
 
 u64 cxgb4_select_ntuple(struct net_device *dev,
-			const struct l2t_entry *l2t)
+                        const struct l2t_entry *l2t)
+{
+        struct adapter *adap = netdev2adap(dev);
+        struct tp_params *tp = &adap->params.tp;
+        u64 ntuple = 0;
+
+        /* Initialize each of the fields which we care about which are present
+         * in the Compressed Filter Tuple.
+         */
+        if (tp->vlan_shift >= 0 && l2t->vlan != VLAN_NONE)
+                ntuple |= (u64)(FT_VLAN_VLD_F | l2t->vlan) << tp->vlan_shift;
+
+        if (tp->port_shift >= 0)
+                ntuple |= (u64)l2t->lport << tp->port_shift;
+
+        if (tp->protocol_shift >= 0)
+                ntuple |= (u64)IPPROTO_TCP << tp->protocol_shift;
+
+        if (tp->vnic_shift >= 0 && (tp->ingress_config & VNIC_F)) {
+                struct port_info *pi = (struct port_info *)netdev_priv(dev);
+
+                ntuple |= (u64)(FT_VNID_ID_VF_V(pi->vin) |
+                                FT_VNID_ID_PF_V(adap->pf) |
+                                FT_VNID_ID_VLD_V(pi->vivld)) << tp->vnic_shift;
+        }
+
+        return ntuple;
+}
+EXPORT_SYMBOL(cxgb4_select_ntuple);
+
+u64 cxgb4_select_ntuple_new(struct net_device *dev,
+                        const struct l2t_entry *l2t, u16 ipsecidx)
 {
 	struct adapter *adap = netdev2adap(dev);
 	struct tp_params *tp = &adap->params.tp;
 	u64 ntuple = 0;
 
-	/* Initialize each of the fields which we care about which are present
-	 * in the Compressed Filter Tuple.
-	 */
-	if (tp->vlan_shift >= 0 && l2t->vlan != VLAN_NONE)
-		ntuple |= (u64)(FT_VLAN_VLD_F | l2t->vlan) << tp->vlan_shift;
-
-	if (tp->port_shift >= 0)
-		ntuple |= (u64)l2t->lport << tp->port_shift;
-
-	if (tp->protocol_shift >= 0)
-		ntuple |= (u64)IPPROTO_TCP << tp->protocol_shift;
-
-	if (tp->vnic_shift >= 0 && (tp->ingress_config & VNIC_F)) {
-		struct port_info *pi = (struct port_info *)netdev_priv(dev);
-
-		ntuple |= (u64)(FT_VNID_ID_VF_V(pi->vin) |
-				FT_VNID_ID_PF_V(adap->pf) |
-				FT_VNID_ID_VLD_V(pi->vivld)) << tp->vnic_shift;
-	}
+	ntuple = cxgb4_select_ntuple(dev, l2t);
+        if (tp->ipsecidx_shift >= 0)
+                ntuple |= (u64)ipsecidx << tp->ipsecidx_shift;
 
 	return ntuple;
 }
-EXPORT_SYMBOL(cxgb4_select_ntuple);
 
 /*
  * Called when the host's neighbor layer makes a change to some entry that is
@@ -563,7 +577,7 @@ void t4_l2t_update(struct adapter *adap, struct neighbour *neigh)
 			if (cb->arp_err_handler)
 				cb->arp_err_handler(cb->handle, skb);
 			else
-				t4_ofld_send(adap, skb);
+				cxgb4_uld_xmit(adap->port[e->lport], skb);
 			spin_lock(&e->lock);
 		}
 	}

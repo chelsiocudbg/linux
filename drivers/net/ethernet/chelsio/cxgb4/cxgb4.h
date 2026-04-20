@@ -779,8 +779,8 @@ struct work_struct;
 enum {                                 /* adapter flags */
 	CXGB4_FULL_INIT_DONE		= (1 << 0),
 	CXGB4_DEV_ENABLED		= (1 << 1),
-	CXGB4_USING_INTR_SINGLE		= (1 << 2),
-	CXGB4_USING_INTR_MULTI		= (1 << 3),
+	CXGB4_USING_MSI			= (1 << 2),
+	CXGB4_USING_MSIX		= (1 << 3),
 	CXGB4_FW_OK			= (1 << 4),
 	CXGB4_RSS_TNLALLLOOKUP		= (1 << 5),
 	CXGB4_USING_SOFT_PARAMS		= (1 << 6),
@@ -1222,10 +1222,13 @@ struct cxgb4_ethtool_filter {
 	struct cxgb4_ethtool_filter_info *port; /* Per port entry */
 };
 
+#if 0
+// __SS__ commenting for now
 union cxgb4_dev {
 	struct pci_dev *pci_dev;
 	struct platform_device *platform_dev;
 };
+#endif
 
 struct adapter {
 	void __iomem *regs;
@@ -1286,11 +1289,7 @@ struct adapter {
 
 	struct cxgb4_uld_info *uld;
 	struct cxgb4_uld uld_inst;
-	void *uld_handle[CXGB4_ULD_MAX];
-#if 0
-// __SS__ commenting for now
-	void *uld_handle[CXGB4_ULD_TYPE_MAX];
-#endif
+
 	unsigned int num_uld;
 	unsigned int num_ofld_uld;
 	struct list_head list_node;
@@ -1500,29 +1499,6 @@ static inline int is_ethofld(const struct adapter *adap)
 	return adap->params.ethofld;
 }
 
-#if 0
-// __SS__ commenting for now
-static inline bool cxgb4_is_platform_device(struct adapter *adap)
-{
-       return adap->plat_dev;
-}
-
-static inline struct pci_dev *cxgb4_pci_dev(struct adapter *adap)
-{
-       return !cxgb4_is_platform_device(adap) ? adap->pdev.pci_dev : NULL;
-}
-
-static inline struct platform_device *cxgb4_plat_dev(struct adapter *adap)
-{
-       return cxgb4_is_platform_device(adap) ? adap->pdev.platform_dev : NULL;
-}
-
-static inline bool t4_os_is_platform_device(struct adapter *adap)
-{
-       return cxgb4_is_platform_device(adap);
-}
-#endif
-
 static inline u32 t4_read_reg(struct adapter *adap, u32 reg_addr)
 {
 	return readl(adap->regs + (reg_addr - adap->regs_start));
@@ -1566,7 +1542,7 @@ static inline void t4_write_reg64(struct adapter *adap, u32 reg_addr, u64 val)
  */
 static inline void t4_os_pci_read_cfg2(struct adapter *adapter, int reg, u16 *val)
 {
-        cxgb4_common_read_config_word(adapter, reg, val);
+        cxgb4_pci_read_config_word(adapter, reg, val);
 }
 
 /**
@@ -1579,7 +1555,7 @@ static inline void t4_os_pci_read_cfg2(struct adapter *adapter, int reg, u16 *va
  */
 static inline void t4_os_pci_write_cfg1(struct adapter *adapter, int reg, u8 val)
 {
-       cxgb4_common_write_config_byte(adapter, reg, val);
+       cxgb4_pci_write_config_byte(adapter, reg, val);
 }
 
 /**
@@ -1592,7 +1568,7 @@ static inline void t4_os_pci_write_cfg1(struct adapter *adapter, int reg, u8 val
  */
 static inline void t4_os_pci_read_cfg1(struct adapter *adapter, int reg, u8 *val)
 {
-       cxgb4_common_read_config_byte(adapter, reg, val);
+       cxgb4_pci_read_config_byte(adapter, reg, val);
 }
 
 /**
@@ -1960,7 +1936,7 @@ void t4_dump_version_info(struct adapter *adapter);
 int t4_prep_fw(struct adapter *adap, struct fw_info *fw_info,
 	       const u8 *fw_data, unsigned int fw_size,
 	       struct fw_hdr *card_fw, enum dev_state state, int *reset);
-//__SS__ enum chip_type t4_get_chip_type(struct adapter *adap, int ver);
+enum chip_type t4_get_chip_type(struct adapter *adap, int ver);
 int t4_prep_adapter(struct adapter *adapter);
 int t4_shutdown_adapter(struct adapter *adapter);
 
