@@ -176,6 +176,8 @@ void cxgb4_remove_tid(struct tid_info *t, unsigned int qid, unsigned int tid,
                      unsigned short family);
 int cxgb4_get_free_ftid(struct net_device *dev, u8 family, bool hash_en,
                        u32 tc_prio);
+int tid_init(struct tid_info *t);
+void process_tid_release_list(struct work_struct *work);
 
 //END -----------------------old changes for comptability with other drivers --------------END
 struct cxgb4_tid_info_xarray {
@@ -248,8 +250,5 @@ void *cxgb4_uotid_lookup(struct adapter *adap, u32 uotid);
 int cxgb4_uotid_alloc(struct adapter *adap, void *data);
 void cxgb4_uotid_free(struct adapter *adap, u32 uotid);
 
-void cxgb4_tid_info_cleanup(struct adapter *adap);
-int cxgb4_tid_info_init(struct adapter *adap,
-                       const struct fw_caps_config_cmd *caps_cmd);
 #endif
 #endif /* __CXGB4_TID_H__ */

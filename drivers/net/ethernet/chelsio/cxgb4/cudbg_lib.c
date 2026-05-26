@@ -584,7 +584,7 @@ static int cudbg_read_vpd_reg(struct adapter *padap, u32 addr, u32 len,
 	if (vaddr < 0)
 		return vaddr;
 
-	rc = pci_read_vpd(cxgb4_pci_dev(padap), vaddr, len, dest);
+	rc = pci_read_vpd(padap->pdev, vaddr, len, dest);
 	if (rc < 0)
 		return rc;
 

@@ -499,7 +499,7 @@ struct adapter_params {
 	struct vpd_params vpd;
 	struct pf_resources pfres;
 	struct pci_params pci;
-	struct devlog_params devlog; //__SS__ [MAX_UP_CORES];
+	struct devlog_params devlog[MAX_UP_CORES];
 	enum pcie_memwin drv_memwin;
 
 	unsigned int cim_la_size;
@@ -917,9 +917,9 @@ struct tx_sw_desc {
 	dma_addr_t addr[MAX_SKB_FRAGS + 1]; /* DMA mapped addresses */
 };
 
-enum cxgb4_txq_lb_type {
-        CXGB4_TXQ_LB_TYPE_VXLAN     = (1 << 0),
-        CXGB4_TXQ_LB_TYPE_CRYPTO    = (1 << 1),
+enum {
+	LB_VXLAN_TYPE     = (1 << 0),
+	LB_CRYPTO_TYPE    = (1 << 1),
 };
 
 struct sge_txq {
@@ -969,7 +969,6 @@ struct sge_uld_txq {               /* state for an SGE offload Tx queue */
 	u8 tx_reclaim_pending:1;        /* reclaim tx descriptors */
 	u8 full:1;                      /* the Tx ring is full */
 	unsigned long mapping_err;  /* # of I/O MMU packet mapping errors */
-	struct cxgb4_uld_txq *uldtxq;
 } ____cacheline_aligned_in_smp;
 
 struct sge_ctrl_txq {               /* state for an SGE control Tx queue */
@@ -1288,6 +1287,7 @@ struct adapter {
 	struct smt_data *smt;
 
 	struct cxgb4_uld_info *uld;
+	void *uld_handle[CXGB4_ULD_TYPE_MAX];
 	struct cxgb4_uld uld_inst;
 
 	unsigned int num_uld;
@@ -1304,10 +1304,7 @@ struct adapter {
 #endif
 
 	struct tid_info tids;
-#if 0
-// __SS__ commenting for now
-	struct cxgb4_tid_info tidinfo; 	/* TID table */
-#endif
+	struct cxgb4_tid_info tidinfo;  /* TID table */
 	void **tid_release_head;
 	spinlock_t tid_release_lock;
 	struct workqueue_struct *workq;
@@ -1663,8 +1660,6 @@ bool cxgb4_msi_enabled(struct adapter *adap);
 struct net_device * cxgb4_port_chan_to_netdev(struct adapter *adap,
 					      u8 chan);
 void *cxgb4_sge_egr_map_get(struct xarray *map, unsigned int index);
-void cxgb4_sge_egr_map_destroy(struct adapter *adap);
-void cxgb4_sge_egr_map_init(struct adapter *adap);
 void t4_free_sge_resources(struct adapter *adap);
 irq_handler_t t4_intr_handler(struct adapter *adap);
 netdev_tx_t t4_start_xmit(struct sk_buff *skb, struct net_device *dev);
@@ -1847,12 +1842,8 @@ void t4_hw_pci_read_cfg4(struct adapter *adapter, int reg, u32 *val);
 void t4_hw_pci_read_cfg(struct adapter *adap, int reg, u32 *valp, int size);
 void t4_hw_pci_write_cfg(struct adapter *adap, int reg, const u32 val, int size);
 
-#if 0
-// __SS__ commenting for now
 void t4_record_mbox(struct adapter *adapter, const __be64 *cmd,
 		    unsigned int size, int access, int execute);
-#endif
-
 
 struct fw_filter_wr;
 
@@ -1888,14 +1879,14 @@ u32 t4_read_pcie_cfg4(struct adapter *adap, int reg);
 u32 t4_get_util_window(struct adapter *adap);
 void t4_setup_memwin(struct adapter *adap, u32 memwin_base, u32 window);
 
-int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u32 *mem_off,
-                     u32 *mem_base, u32 *mem_aperture);
+int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u64 *mem_off,
+                     u64 *mem_base, u64 *mem_aperture);
 void t4_memory_update_win(struct adapter *adap, int win, u32 addr);
-void t4_memory_rw_residual(struct adapter *adap, u32 off, u32 addr, u8 *buf,
+void t4_memory_rw_residual(struct adapter *adap, u64 off, u64 addr, u8 *buf,
 			   int dir);
 #define T4_MEMORY_WRITE	0
 #define T4_MEMORY_READ	1
-int t4_memory_rw(struct adapter *adap, int win, int mtype, u32 addr, u32 len,
+int t4_memory_rw(struct adapter *adap, int win, int mtype, u64 addr, u64 len,
 		 void *buf, int dir);
 static inline int t4_memory_write(struct adapter *adap, int mtype, u32 addr,
 				  u32 len, __be32 *buf)
@@ -2124,6 +2115,7 @@ void cxgb4_pci_eeh_resume(struct pci_dev *pdev);
 void cxgb4_pci_eeh_reset_prepare(struct pci_dev *pdev);
 void cxgb4_pci_eeh_reset_done(struct pci_dev *pdev);
 //__SS__ int cxgb4_iov_configure(struct pci_dev *pdev, int num_vfs);
+int cxgb4_iov_configure(struct pci_dev *pdev, int num_vfs);
 int cxgb4_adap_probe(struct adapter *adapter);
 void cxgb4_adap_remove(struct adapter *adapter);
 void cxgb4_adap_shutdown(struct adapter *adapter);
@@ -2236,8 +2228,6 @@ void cxgb4_ring_tx_db(struct adapter *adap, struct sge_txq *q, int n);
 int t4_set_vlan_acl(struct adapter *adap, unsigned int mbox, unsigned int vf,
 		    u16 vlan);
 
-#if 0
-// __SS__ commenting for now
 /* Flash Layout helpers */
 int t4_flash_location_start_sec(struct adapter *adap,
                                enum t4_flash_loc loc);
@@ -2247,7 +2237,6 @@ int t4_flash_location_start(struct adapter *adap,
                            enum t4_flash_loc loc);
 int t4_flash_location_size(struct adapter *adap,
                           enum t4_flash_loc loc);
-#endif
 int cxgb4_dcb_enabled(const struct net_device *dev);
 
 int cxgb4_thermal_init(struct adapter *adap);

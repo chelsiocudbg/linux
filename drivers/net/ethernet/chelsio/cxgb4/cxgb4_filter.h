@@ -36,7 +36,6 @@
 #define __CXGB4_FILTER_H
 
 #include "t4_msg.h"
-#define CXGB4_FILTER_ID_ANY UINT_MAX
 
 /* Defined bit width of user definable filter tuples
  */
@@ -235,41 +234,49 @@ struct cpl_set_tcb_rpl;
 struct cpl_act_open_rpl;
 struct cpl_abort_rpl_rss;
 
-void filter_rpl(struct adapter *adap, const struct cpl_set_tcb_rpl *rpl);
-void hash_filter_rpl(struct adapter *adap, const struct cpl_act_open_rpl *rpl);
-void hash_del_filter_rpl(struct adapter *adap,
-                        const struct cpl_abort_rpl_rss *rpl);
 void clear_filter(struct adapter *adap, struct filter_entry *f);
 
 int set_filter_wr(struct adapter *adapter, int fidx);
 int delete_filter(struct adapter *adapter, unsigned int fidx);
 
 int writable_filter(struct filter_entry *f);
-void clear_all_filters(struct adapter *adapter);
-void init_hash_filter(struct adapter *adap);
 bool is_filter_exact_match(struct adapter *adap,
                            struct ch_filter_specification *fs);
+
+int cxgb4_hash_filter_config_verify(struct adapter *adap, bool offload_caps);
+int cxgb4_hash_filter_init(struct adapter *adap);
+
+void cxgb4_filter_clear_all(struct adapter *adapter);
+
 void cxgb4_cleanup_ethtool_filters(struct adapter *adap);
 int cxgb4_init_ethtool_filters(struct adapter *adap);
 
-
+void cxgb4_filter_normal_rpl(struct adapter *adap,
+			     const struct cpl_set_tcb_rpl *rpl);
 int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
-                              __be32 sip, __be16 sport, __be16 vlan,
-                              unsigned int queue,
-                              unsigned char port, unsigned char mask);
+			       __be32 sip, __be16 sport, __be16 vlan,
+			       unsigned int queue,
+			       unsigned char port, unsigned char mask);
 int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
-                              unsigned int queue, bool ipv6);
+			       unsigned int queue, bool ipv6);
 
-int __cxgb4_set_filter(struct net_device *dev, int filter_id,
-                      struct ch_filter_specification *fs,
-                      struct filter_ctx *ctx);
-int __cxgb4_del_filter(struct net_device *dev, int filter_id,
-                      struct ch_filter_specification *fs,
-                      struct filter_ctx *ctx);
-int cxgb4_set_filter(struct net_device *dev, int filter_id,
-                    struct ch_filter_specification *fs);
-int cxgb4_del_filter(struct net_device *dev, int filter_id,
-                    struct ch_filter_specification *fs);
-int cxgb4_get_filter_counters(struct net_device *dev, unsigned int fidx,
-                             u64 *hitcnt, u64 *bytecnt, bool hash);
+void cxgb4_filter_hash_create_rpl(struct adapter *adap,
+				  const struct cpl_act_open_rpl *rpl);
+void cxgb4_filter_hash_delete_rpl(struct adapter *adap,
+				  const struct cpl_abort_rpl_rss *rpl);
+
+int cxgb4_filter_create(struct net_device *dev, u32 filter_id,
+			struct ch_filter_specification *fs,
+			struct filter_ctx *ctx, gfp_t flags);
+int cxgb4_filter_delete(struct net_device *dev, u32 filter_id,
+			struct ch_filter_specification *fs,
+			struct filter_ctx *ctx, gfp_t flags);
+
+int cxgb4_filter_get_count(struct adapter *adapter, unsigned int fidx,
+			   u64 *c, int hash, bool get_byte);
+int cxgb4_filter_get_counters(struct net_device *dev, unsigned int fidx,
+			      u64 *hitcnt, u64 *bytecnt, int hash);
+void cxgb4_filter_clear_all(struct adapter *adapter);
+void cxgb4_flush_all_filters(struct adapter *adapter, gfp_t flags);
+
 #endif /* __CXGB4_FILTER_H */

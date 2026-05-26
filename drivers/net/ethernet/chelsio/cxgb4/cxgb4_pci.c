@@ -383,7 +383,7 @@ static int cxgb4_pci_init_one(struct pci_dev *pdev, const struct pci_device_id *
 
        pci_set_drvdata(pdev, adap);
 
-       adap->pdev.pci_dev = pdev;
+       adap->pdev = pdev;
        adap->pdev_dev = &pdev->dev;
 
        ret = cxgb4_adap_probe(adap);

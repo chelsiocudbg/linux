@@ -933,6 +933,7 @@ struct c4iw_ep {
 	unsigned int retry_count;
 	int snd_win;
 	int rcv_win;
+	u16 ipsecidx;
 	u32 snd_wscale;
 	struct c4iw_ep_stats stats;
 	u32 srqe_idx;

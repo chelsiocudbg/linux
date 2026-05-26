@@ -173,7 +173,7 @@ static int cxgb4_mqprio_alloc_hw_resources(struct net_device *dev)
 		refcount_inc(&adap->tc_mqprio->refcnt);
 	}
 
-	if (!(adap->flags & CXGB4_USING_INTR_MULTI))
+	if (!(adap->flags & CXGB4_USING_MSIX))
 		msix = -((int)adap->sge.intrq.abs_id + 1);
 
 	for (i = 0; i < pi->nqsets; i++) {
@@ -217,7 +217,7 @@ static int cxgb4_mqprio_alloc_hw_resources(struct net_device *dev)
 			goto out_free_queues;
 
 		/* Allocate IRQs, set IRQ affinity, and start Rx */
-		if (adap->flags & CXGB4_USING_INTR_MULTI) {
+		if (adap->flags & CXGB4_USING_MSIX) {
 			ret = request_irq(eorxq->msix->vec, t4_sge_intr_msix, 0,
 					  eorxq->msix->desc, &eorxq->rspq);
 			if (ret)
@@ -240,7 +240,7 @@ out_free_msix:
 		if (adap->flags & CXGB4_FULL_INIT_DONE)
 			cxgb4_quiesce_rx(&eorxq->rspq);
 
-		if (adap->flags & CXGB4_USING_INTR_MULTI) {
+		if (adap->flags & CXGB4_USING_MSIX) {
 			cxgb4_clear_msix_aff(eorxq->msix->vec,
 					     eorxq->msix->aff_mask);
 			free_irq(eorxq->msix->vec, &eorxq->rspq);
@@ -293,7 +293,7 @@ static void cxgb4_mqprio_free_hw_resources(struct net_device *dev)
 		if (!(adap->flags & CXGB4_SHUTTING_DOWN))
 			cxgb4_quiesce_rx(&eorxq->rspq);
 
-		if (adap->flags & CXGB4_USING_INTR_MULTI) {
+		if (adap->flags & CXGB4_USING_MSIX) {
 			cxgb4_clear_msix_aff(eorxq->msix->vec,
 					     eorxq->msix->aff_mask);
 			free_irq(eorxq->msix->vec, &eorxq->rspq);

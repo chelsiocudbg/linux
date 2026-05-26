@@ -114,7 +114,7 @@ struct l2t_entry *cxgb4_l2t_get(struct l2t_data *d, struct neighbour *neigh,
 				const struct net_device *physdev,
 				unsigned int priority);
 u64 cxgb4_select_ntuple(struct net_device *dev,
-			const struct l2t_entry *l2t);
+			const struct l2t_entry *l2t, u16 ipsecidx);
 void t4_l2t_update(struct adapter *adap, struct neighbour *neigh);
 struct l2t_entry *t4_l2t_alloc_switching(struct adapter *adap, u16 vlan,
 					 u8 port, u8 *dmac);

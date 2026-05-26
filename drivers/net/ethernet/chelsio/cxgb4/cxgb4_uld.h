@@ -158,11 +158,6 @@ static inline void cxgb4_uld_skb_set_credits(struct sk_buff *skb,
        skb->priority |= CXGB4_ULD_SKB_CREDITS_V(credits);
 }
 
-static inline u16 cxgb4_uld_skb_get_credits(const struct sk_buff *skb)
-{
-       return CXGB4_ULD_SKB_CREDITS_G(skb->priority);
-}
-
 static inline void cxgb4_uld_skb_set_queue(struct sk_buff *skb, u16 queue)
 {
        skb_set_queue_mapping(skb, queue);
@@ -185,6 +180,8 @@ static inline void set_wr_txq(struct sk_buff *skb, int prio, int queue)
        cxgb4_uld_skb_set_queue(skb, queue);
 }
 
+#if 0
+// comenting as its giving redeclaration error
 enum cxgb4_uld_type {
        CXGB4_ULD_INIT,
        CXGB4_ULD_RDMA,
@@ -196,6 +193,7 @@ enum cxgb4_uld_type {
        CXGB4_ULD_KTLS,
        CXGB4_ULD_MAX
 };
+#endif
 
 enum cxgb4_tx_uld {
 	CXGB4_TX_OFLD,
@@ -235,8 +233,6 @@ struct t4_lro_mgr;
 //BEGIN--------------- changes from outbox new file cxgb4_uld.h -------------------BEGIN
 extern struct mutex uld_mutex;
 
-#if 0
-// __SS__ commenting for now
 enum cxgb4_uld_type {
 	CXGB4_ULD_RDMA,
 	CXGB4_ULD_ISCSI,
@@ -252,7 +248,6 @@ enum cxgb4_uld_type {
 	CXGB4_ULD_KTLS,
 	CXGB4_ULD_TYPE_MAX
 };
-#endif
 
 struct cxgb4_range {
 	unsigned int start;
@@ -504,6 +499,7 @@ struct ch_ktls_stats_debug {
 struct cxgb4_lld_info {
 	struct pci_dev *pdev;                /* associated PCI device */
 	struct l2t_data *l2t;                /* L2 table */
+	struct cxgb4_uld_tid_info uld_tids;  /* ULD TID info */
 	struct tid_info *tids;               /* TID table */
 	struct net_device **ports;           /* device ports */
 	const struct cxgb4_virt_res *vr;     /* assorted HW resources */
@@ -593,18 +589,29 @@ struct cxgb4_uld_info {
 #endif
 #if IS_ENABLED(CONFIG_XFRM_OFFLOAD)
 	const struct xfrmdev_ops *xfrmdev_ops;
+	u16 (*xfrm_ipsecidx_get)(struct xfrm_state *xfrm);
+	void (*ch_ipsec_show)(struct adapter *adap, struct seq_file *seq);
 #endif
 };
 
-void cxgb4_uld_enable(struct adapter *adap);
+extern struct cxgb4_uld_info cxgb4_ulds[CXGB4_ULD_TYPE_MAX];
+
 void cxgb4_register_uld(enum cxgb4_uld_type type, const struct cxgb4_uld_info *p);
 int cxgb4_unregister_uld(enum cxgb4_uld_type type);
 int cxgb4_ofld_send(struct net_device *dev, struct sk_buff *skb);
 int cxgb4_immdata_send(struct net_device *dev, unsigned int idx,
 		       const void *src, unsigned int len);
 int cxgb4_crypto_send(struct net_device *dev, struct sk_buff *skb);
+unsigned int cxgb4_modparam_enable_ulds(void);
+int uld_attach(struct adapter *adap, unsigned int uld);
+void cxgb4_uld_alloc_resources(struct adapter *adap,
+                               enum cxgb4_uld_type type, const struct cxgb4_uld_info *p);
+bool cxgb4_modparam_enable_ulds_supported(enum cxgb4_uld_type type);
+
 unsigned int cxgb4_dbfifo_count(const struct net_device *dev, int lpfifo);
 unsigned int cxgb4_port_chan(const struct net_device *dev);
+u8 cxgb4_port_tx_chan(const struct net_device *dev);
+
 unsigned int cxgb4_port_e2cchan(const struct net_device *dev);
 unsigned int cxgb4_port_viid(const struct net_device *dev);
 unsigned int cxgb4_port_idx(const struct net_device *dev);
@@ -620,8 +627,13 @@ void cxgb4_get_tcp_stats(struct pci_dev *pdev, struct tp_tcp_stats *v4,
 struct sk_buff *cxgb4_pktgl_to_skb(const struct pkt_gl *gl,
 				   unsigned int skb_len, unsigned int pull_len);
 int cxgb4_sync_txq_pidx(struct net_device *dev, u16 qid, u16 pidx, u16 size);
+bool cxgb4_uld_sendpath_enabled(struct adapter *adap);
+void t4_pktgl_free(const struct pkt_gl *gl);
 int cxgb4_flush_eq_cache(struct net_device *dev);
 int cxgb4_read_tpte(struct net_device *dev, u32 stag, __be32 *tpte);
+struct cxgb4_uld_queue_map *cxgb4_uld_queues_txq_map_get(struct net_device *dev,
+							 enum cxgb4_uld_txq_type qtype,
+							 enum cxgb4_uld_type uld);
 u64 cxgb4_read_sge_timestamp(struct net_device *dev);
 
 enum cxgb4_bar2_qtype { CXGB4_BAR2_QTYPE_EGRESS, CXGB4_BAR2_QTYPE_INGRESS };
@@ -631,5 +643,21 @@ int cxgb4_bar2_sge_qregs(struct net_device *dev,
 			 int user,
 			 u64 *pbar2_qoffset,
 			 unsigned int *pbar2_qid);
+
+u16 cxgb4_uld_xfrm_ipsecidx_get(struct xfrm_state *xfrm);
+struct resource *cxgb4_bar_resource(struct net_device *dev, u8 index);
+
+int cxgb4_uld_xmit(struct net_device *dev, struct sk_buff *skb);
+void cxgb4_uld_txq_all_recover(struct adapter *adap);
+
+void cxgb4_uld_queues_cleanup(struct adapter *adap);
+void cxgb4_uld_queues_init(struct adapter *adap);
+
+const char *cxgb4_uld_type_to_name(enum cxgb4_uld_type uld);
+void cxgb4_uld_cleanup(struct adapter *adap);
+int cxgb4_uld_init(struct adapter *adap,
+                  const struct fw_caps_config_cmd *caps_cmd);
+bool cxgb4_uld_supported_any(struct adapter *adap);
+bool cxgb4_uld_supported(struct adapter *adap, enum cxgb4_uld_type uld);
 
 #endif  /* !__CXGB4_ULD_H */

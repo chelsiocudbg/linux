@@ -191,7 +191,7 @@ static void cxgb4_queue_tid_release(struct tid_info *t, unsigned int chan,
 /*
  * Process the list of pending TID release requests.
  */
-static void process_tid_release_list(struct work_struct *work)
+void process_tid_release_list(struct work_struct *work)
 {
        struct sk_buff *skb;
        struct adapter *adap;
@@ -263,7 +263,7 @@ EXPORT_SYMBOL(cxgb4_remove_tid);
 /*
  * Allocate and initialize the TID tables.  Returns 0 on success.
  */
-static int tid_init(struct tid_info *t)
+int tid_init(struct tid_info *t)
 {
        struct adapter *adap = container_of(t, struct adapter, tids);
        unsigned int max_ftids = t->nftids + t->nsftids;
@@ -299,7 +299,7 @@ static int tid_init(struct tid_info *t)
        t->stid_bmap = (unsigned long *)&t->stid_tab[t->nstids + t->nsftids];
        t->hpftid_tab = (struct filter_entry *)&t->stid_bmap[stid_bmap_size];
        t->hpftid_bmap = (unsigned long *)&t->hpftid_tab[t->nhpftids];
-       t->ftid_tab = (struct filter_entry *)&t->hpftid_bmap[hpftid_bmap_size]
+       t->ftid_tab = (struct filter_entry *)&t->hpftid_bmap[hpftid_bmap_size];
        t->ftid_bmap = (unsigned long *)&t->ftid_tab[max_ftids];
        t->eotid_tab = (struct eotid_entry *)&t->ftid_bmap[ftid_bmap_size];
        t->eotid_bmap = (unsigned long *)&t->eotid_tab[t->neotids];
@@ -340,244 +340,6 @@ static int tid_init(struct tid_info *t)
        bitmap_zero(t->ftid_bmap, t->nftids);
        return 0;
 }
-
-static int cxgb4_tid_query_params(struct adapter *adap,
-                                 const struct fw_caps_config_cmd *caps_cmd)
-{
-	struct tid_info *t = &adap->tids;
-	u32 tid_size, stid_start;
-	u32 params[7], val[7];
-	unsigned int chip_ver;
-	u32 stid_size;
-	int ret;
-
-	chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
-
-	params[0] = FW_PARAM_DEV(NTID);
-	params[1] = FW_PARAM_PFVF(FILTER_START);
-	params[2] = FW_PARAM_PFVF(FILTER_END);
-	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 3, params, val);
-	if (ret < 0)
-		return ret;
-	tid_size = val[0];
-	t->ftid_base = val[1];
-	t->nftids = val[2] - val[1] + 1;
-
-	/* T6 TCAM can contain about 4 regions (Hi-Priority filter,
-	 * Active, Server and Normal priority filter regions).
-	 */
-	if (chip_ver > CHELSIO_T5) {
-		params[0] = FW_PARAM_PFVF(HPFILTER_START);
-		params[1] = FW_PARAM_PFVF(HPFILTER_END);
-		ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2,
-				params, val);
-		if (ret < 0)
-			return ret;
-		t->hpftid_base = val[0];
-		t->nhpftids = val[1] - val[0] + 1;
-	}
-
-	params[0] = FW_PARAM_PFVF(SERVER_START);
-	params[1] = FW_PARAM_PFVF(SERVER_END);
-	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2, params, val);
-	if (ret < 0)
-		return ret;
-	stid_start = val[0];
-	stid_size = val[1] - val[0] + 1;
-
-	if ((caps_cmd->niccaps & htons(FW_CAPS_CONFIG_NIC_HASHFILTER)) &&
-			chip_ver > CHELSIO_T4) {
-		u32 lconfig, hbase, hconfig;
-
-		if (cxgb4_hash_filter_config_verify(adap, !!caps_cmd->ofldcaps))
-			goto hashtids_done;
-
-		lconfig = t4_read_reg(adap, LE_DB_CONFIG_A);
-		if (lconfig & HASHEN_F) {
-			hconfig = t4_read_reg(adap, LE_DB_HASH_CONFIG_A);
-			if (chip_ver > CHELSIO_T5) {
-				hbase = t4_read_reg(adap,
-						T6_LE_DB_HASH_TID_BASE_A);
-				t->hash_base = hbase;
-				t->nhash = hconfig & 0xfffffU;
-			} else {
-				hbase = t4_read_reg(adap,
-						LE_DB_TID_HASHBASE_A);
-				t->hash_base = hbase;
-				t->nhash = (1 << HASHTIDSIZE_G(hconfig));
-			}
-
-#if 0
-// __SS__ commenting for now
-			t->hashcoll_tids.start = t->hpftids.start +
-				t->hpftids.size;
-			t->hashcoll_tids.size = stid_start -
-				t->hashcoll_tids.start;
-#endif
-		}
-	}
-
-hashtids_done:
-	if (!caps_cmd->ofldcaps)
-		goto offload_tids_done;
-
-	if (stid_size) {
-		t->stids.start = stid_start;
-		t->stids.size = stid_size;
-	}
-
-	params[0] = FW_PARAM_PFVF(ETHOFLD_START);
-	params[1] = FW_PARAM_PFVF(ETHOFLD_END);
-	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2, params, val);
-	if (val[0] != val[1] && ret >= 0) {
-		t->eotid_base = val[0];
-		t->neotids = min_t(u32, MAX_ATIDS, val[1] - val[0] + 1);
-		adap->params.offload = 1;
-	}
-
-	/* query params related to active filter region */
-	params[0] = FW_PARAM_PFVF(ACTIVE_FILTER_START);
-	params[1] = FW_PARAM_PFVF(ACTIVE_FILTER_END);
-	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2, params, val);
-	/* If Active filter size is set we enable establishing
-	 * offload connection through firmware work request
-	 */
-	if (val[0] != val[1] && ret >= 0) {
-		adap->flags |= CXGB4_FW_OFLD_CONN;
-		t->aftid_base = val[0];
-		t->aftid_end = val[1];
-	}
-
-	/* Setup server filter region. Divide the available filter
-	 * region into two parts. Regular filters get 1/3rd and server
-	 * filters get 2/3rd part. This is only enabled if workarond
-	 * path is enabled.
-	 * 1. For regular filters.
-	 * 2. Server filter: This are special filters which are used
-	 * to redirect SYN packets to offload queue.
-	 */
-	if ((adap->flags & CXGB4_FW_OFLD_CONN) && !is_bypass(adap)) {
-		u32 n_user_filters;
-		/* If we have invalid value in module-param then,
-		 * use default value of 33% for user-filters.
-		 */
-		n_user_filters = mult_frac(t->nftids, 33, 100);
-		t->sftid_base = t->ftid_base + n_user_filters;
-		t->nsftids = t->nftids - n_user_filters;
-		/* Reserve last sftid for default-rule filter */
-		t->sftids.size--;
-		t->nftids = t->sftid_base - t->ftid_base;
-	}
-
-offload_tids_done:
-
-	if (tid_size) {
-		t->tid_base = t->hpftids.start + t->hpftids.size;
-		t->ntids = tid_size;
-		t->atid_base = 0;
-		/*
-		 * ATID field in CPL_ACT_OPEN_REQ is 24 bit wide of which atid
-		 * is 14 bit wide. So the CXGB4_MAX_ATIDS can be a most 2^14 - 1.
-		 * remaining 10 bits are used for rss_qid.
-		 */
-		t->natids = min(t->ntids, CXGB4_MAX_ATIDS);
-	}
-
-#if 0
-// __SS__ commenting for now
-	/* Now from t7,
-	 *--------------------------------------------------
-	 *      (ipv4)  (ipv6) (ipv6 with HASHEN &
-	 *                      EXTN_HASH_IPV4 set)
-	 * TCAM    1      2             2
-	 * HASH    1      2             1
-	 * --------------------------------------------------
-	 */
-	u8 ipv6_max_range = 2;
-	u32 lconfig = t4_read_reg(adap, LE_DB_CONFIG_A);
-
-	if (chip_ver > CHELSIO_T6 && lconfig & HASHEN_F)
-		ipv6_max_range = 1;
-
-	t->tids.max_range = ipv6_max_range;
-	t->atids.max_range = 1;
-	t->hpftids.max_range = 2;
-	t->ftids.max_range = chip_ver > CHELSIO_T5 ? 2 : 4;
-	t->hashtids.max_range = ipv6_max_range;
-	t->hashcoll_tids.max_range = ipv6_max_range;
-	t->stids.max_range = 2;
-	t->uotids.max_range = 1;
-	t->sftids.max_range = 1;
-#endif
-	return 0;
-}
-
-/* Allocate and initialize the TID tables.  Returns 0 on success.
- */
-int cxgb4_tid_info_init(struct adapter *adap,
-                       const struct fw_caps_config_cmd *caps_cmd)
-{
-	struct tid_info *t = &adap->tids;
-	int ret;
-
-	spin_lock_init(&t->tid_release_lock);
-	INIT_WORK(&t->tid_release_task, cxgb4_tid_process_release_list);
-
-	ret = cxgb4_tid_query_params(adap, caps_cmd);
-	if (ret)
-		goto out_free;
-
-#if 0
-// __SS__ commenting for now
-	ret = cxgb4_tid_info_xarray_init(&t->tids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->atids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->ftids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->hpftids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->hashtids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->hashcoll_tids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->stids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->uotids);
-	if (ret)
-		goto out_free;
-
-	ret = cxgb4_tid_info_xarray_init(&t->sftids);
-	if (ret)
-		goto out_free;
-
-	/* Reserve stid 0 for T4/T5 adapters */
-	if (t->stids.size && !t->stids.start &&
-			(CHELSIO_CHIP_VERSION(adap->params.chip) <= CHELSIO_T5))
-		set_bit(0, t->stids.bitmap);
-#endif
-
-	return 0;
-
-out_free:
-//	cxgb4_tid_info_cleanup(adap);
-	return ret;
-}
-#endif
 // ------------ END old changes --------------------
 
 #if 0
@@ -712,15 +474,6 @@ static bool cxgb4_atid_out_of_range(struct adapter *adap, u32 atid)
 	//return atid < adap->tids.atid_base || atid >= (adap->tids.atid_base + adap->tids.natids);
 }
 
-void *cxgb4_atid_lookup(struct adapter *adap, u32 atid)
-{
-       if (cxgb4_atid_out_of_range(adap, atid))
-               return NULL;
-
-       return cxgb4_tid_xarray_lookup(&adap->tidinfo.atids, atid);
-       //return lookup_atid(&adap->tids, atid);
-}
-
 /*
  * upper-layer driver support
  */
@@ -766,33 +519,6 @@ bool cxgb4_tid_out_of_range(struct adapter *adap, u32 tid)
 {
        return cxgb4_tid_oor(&adap->tidinfo.tids, tid);
        //return tid < adap->tids.tid_base || tid >= (adap->tids.tid_base + adap->tids.ntids);
-}
-
-void *cxgb4_tid_lookup(struct adapter *adap, u32 tid)
-{
-       if (cxgb4_tid_out_of_range(adap, tid))
-               return NULL;
-
-       return cxgb4_tid_xarray_lookup(&adap->tidinfo.tids, tid);
-       //return lookup_tid(&adap->tids, tid);
-}
-
-int cxgb4_tid_insert(struct adapter *adap, u32 tid, void *data, bool range)
-{
-	struct cxgb4_tid_info *t = &adap->tidinfo;
-	int ret;
-
-       if (cxgb4_tid_out_of_range(adap, tid))
-               return -EOPNOTSUPP;
-
-       if (range)
-//	       tid &= ~(get_ipv6_max_range(adap) - 1);
-	       tid &= ~(t->tids.max_range - 1);
-
-       xa_lock_irq(&t->tids.tid_tab);
-       ret = cxgb4_tid_xarray_alloc(&t->tids, data, tid, range);
-       xa_unlock_irq(&t->tids.tid_tab);
-       return ret;
 }
 
 /* Populate a TID_RELEASE WR.  Caller must properly size the skb.
@@ -968,26 +694,6 @@ int cxgb4_hashtid_insert(struct adapter *adap, u32 hashtid, void *data,
        ret = cxgb4_tid_xarray_alloc(&t->hashtids, data, hashtid, range);
        xa_unlock_irq(&t->hashtids.tid_tab);
        return ret;
-}
-
-void cxgb4_hashtid_remove(struct adapter *adap, u16 ctrlq_idx, u32 hashtid,
-                         bool range)
-{
-	struct cxgb4_tid_info *t = &adap->tidinfo;
-
-       if (!cxgb4_hashcoll_tid_out_of_range(adap, hashtid)) {
-               cxgb4_hashcoll_tid_remove(adap, ctrlq_idx, hashtid, range);
-               return;
-       }
-
-       if (cxgb4_hash_tid_out_of_range(adap, hashtid))
-               return;
-
-       xa_lock_bh(&t->hashtids.tid_tab);
-       cxgb4_tid_xarray_free(&t->hashtids, hashtid, range);
-       xa_unlock_bh(&t->hashtids.tid_tab);
-
-       cxgb4_tid_remove_send(adap, ctrlq_idx, hashtid);
 }
 
 bool cxgb4_hpftid_out_of_range(struct adapter *adap, u32 hpftid)
@@ -1188,6 +894,7 @@ void cxgb4_stid_free(struct adapter *adap, u32 stid, bool range)
        xa_unlock_bh(&t->stids.tid_tab);
 }
 
+#if 0
 static bool cxgb4_uotid_out_of_range(struct adapter *adap, u32 uotid)
 {
        return cxgb4_tid_oor(&adap->tidinfo.uotids, uotid);
@@ -1435,6 +1142,7 @@ void cxgb4_tid_info_cleanup(struct adapter *adap)
        memset(&adap->tidinfo, 0, sizeof(adap->tidinfo));
 }
 
+// Harshita comented 
 /* Allocate and initialize the TID tables.  Returns 0 on success.
  */
 int cxgb4_tid_info_init(struct adapter *adap,
@@ -1497,4 +1205,5 @@ out_free:
 	cxgb4_tid_info_cleanup(adap);
 	return ret;
 }
+#endif
 #endif

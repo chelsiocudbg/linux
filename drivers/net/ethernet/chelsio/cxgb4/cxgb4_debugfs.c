@@ -3468,58 +3468,58 @@ static int cxgb4_sge_qinfo_ctrl_rdma(struct seq_file *seq, int *row)
 
 static int cxgb4_sge_qinfo_ctrl_iscsi(struct seq_file *seq, int *row)
 {
-       struct t4_linux_debugfs_data *d = seq->private;
-       const struct sge_ctrl_txq *ctrlq;
-       struct adapter *adap = d->adap;
-       struct sge *s = &adap->sge;
-       int r, nq, nentries;
+	struct t4_linux_debugfs_data *d = seq->private;
+	const struct sge_ctrl_txq *ctrlq;
+	struct adapter *adap = d->adap;
+	struct sge *s = &adap->sge;
+	int r, nq, nentries;
 
-       if (!cxgb4_uld_supported(adap, CXGB4_ULD_ISCSI) ||
-           !cxgb4_uld_sendpath_enabled(adap))
-               return -EOPNOTSUPP;
+	if (!cxgb4_uld_supported(adap, CXGB4_ULD_ISCSI) ||
+			!cxgb4_uld_sendpath_enabled(adap))
+		return -EOPNOTSUPP;
 
-       nq = adap->tidinfo.sftids.size ? 1 : adap->params.nports * adap->params.num_up_cores;
-       nentries = DIV_ROUND_UP(nq, SGE_QINFO_NUM_PER_ROW);
-       if (!row)
-               return nentries;
+	nq = adap->tidinfo.sftids.size ? 1 : adap->params.nports * adap->params.num_up_cores;
+	nentries = DIV_ROUND_UP(nq, SGE_QINFO_NUM_PER_ROW);
+	if (!row)
+		return nentries;
 
-       r = *row;
-       if (r >= nentries) {
-               *row -= nentries;
-               return -EINVAL;
-       }
+	r = *row;
+	if (r >= nentries) {
+		*row -= nentries;
+		return -EINVAL;
+	}
 
-       ctrlq = &s->ctrlq[CXGB4_ULD_CTRLQ_INDEX_ISCSI + (r * SGE_QINFO_NUM_PER_ROW)];
-       cxgb4_sge_qinfo_ctrl(seq, r, nq, ctrlq, "ISCSI-CONTROL");
-       return 0;
+	ctrlq = &s->ctrlq[CXGB4_ULD_CTRLQ_INDEX_ISCSI + (r * SGE_QINFO_NUM_PER_ROW)];
+	cxgb4_sge_qinfo_ctrl(seq, r, nq, ctrlq, "ISCSI-CONTROL");
+	return 0;
 }
 
 static int cxgb4_sge_qinfo_ctrl_iscsit(struct seq_file *seq, int *row)
 {
-       struct t4_linux_debugfs_data *d = seq->private;
-       const struct sge_ctrl_txq *ctrlq;
-       struct adapter *adap = d->adap;
-       struct sge *s = &adap->sge;
-       int r, nq, nentries;
+	struct t4_linux_debugfs_data *d = seq->private;
+	const struct sge_ctrl_txq *ctrlq;
+	struct adapter *adap = d->adap;
+	struct sge *s = &adap->sge;
+	int r, nq, nentries;
 
-       if (!cxgb4_uld_supported(adap, CXGB4_ULD_ISCSIT) ||
-           !cxgb4_uld_sendpath_enabled(adap))
-               return -EOPNOTSUPP;
+	if (!cxgb4_uld_supported(adap, CXGB4_ULD_ISCSIT) ||
+			!cxgb4_uld_sendpath_enabled(adap))
+		return -EOPNOTSUPP;
 
-       nq = adap->tidinfo.sftids.size ? 1 : adap->params.nports * adap->params.num_up_cores;
-       nentries = DIV_ROUND_UP(nq, SGE_QINFO_NUM_PER_ROW);
-       if (!row)
-               return nentries;
+	nq = adap->tidinfo.sftids.size ? 1 : adap->params.nports * adap->params.num_up_cores;
+	nentries = DIV_ROUND_UP(nq, SGE_QINFO_NUM_PER_ROW);
+	if (!row)
+		return nentries;
 
-       r = *row;
-       if (r >= nentries) {
-               *row -= nentries;
-               return -EINVAL;
-       }
+	r = *row;
+	if (r >= nentries) {
+		*row -= nentries;
+		return -EINVAL;
+	}
 
-       ctrlq = &s->ctrlq[CXGB4_ULD_CTRLQ_INDEX_ISCSIT + (r * SGE_QINFO_NUM_PER_ROW)];
-       cxgb4_sge_qinfo_ctrl(seq, r, nq, ctrlq, "ISCSIT-CONTROL");
-       return 0;
+	ctrlq = &s->ctrlq[CXGB4_ULD_CTRLQ_INDEX_ISCSIT + (r * SGE_QINFO_NUM_PER_ROW)];
+	cxgb4_sge_qinfo_ctrl(seq, r, nq, ctrlq, "ISCSIT-CONTROL");
+	return 0;
 }
 
 static int cxgb4_sge_qinfo_ctrl_nvmeh(struct seq_file *seq, int *row)
@@ -3831,6 +3831,88 @@ static int tid_info_show(struct seq_file *seq, void *v)
 {
 	struct t4_linux_debugfs_data *d = seq->private;
 	struct adapter *adap = d->adap;
+	const struct tid_info *t;
+	unsigned int chip_ver;
+
+	chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
+	t = &adap->tids;
+
+	if (t4_read_reg(adap, LE_DB_CONFIG_A) & HASHEN_F) {
+		unsigned int sb;
+		seq_printf(seq, "Connections in use: %u\n",
+			   atomic_read(&t->conns_in_use));
+		if (chip_ver <= CHELSIO_T5)
+			sb = t4_read_reg(adap, LE_DB_SERVER_INDEX_A) / 4;
+		else
+			sb = t4_read_reg(adap, LE_DB_SRVR_START_INDEX_A);
+
+		if (sb) {
+			seq_printf(seq, "TID range: %u..%u/%u..%u", t->tid_base,
+				   sb - 1, adap->tids.hash_base,
+				   t->ntids + t->tid_base - 1);
+			seq_printf(seq, ", in use: %u/%u\n",
+				   atomic_read(&t->tids_in_use),
+				   atomic_read(&t->hash_tids_in_use));
+		} else if (adap->flags & CXGB4_FW_OFLD_CONN) {
+			seq_printf(seq, "TID range: %u..%u/%u..%u", t->aftid_base,
+				   t->aftid_end,
+				   adap->tids.hash_base,
+				   t->tid_base + t->ntids - 1);
+			seq_printf(seq, ", in use: %u/%u\n",
+				   atomic_read(&t->tids_in_use),
+				   atomic_read(&t->hash_tids_in_use));
+		} else {
+			seq_printf(seq, "TID range: %u..%u",
+				   adap->tids.hash_base,
+				   t->tid_base + t->ntids - 1);
+			seq_printf(seq, ", in use: %u\n",
+				   atomic_read(&t->hash_tids_in_use));
+		}
+	} else if (t->ntids) {
+		seq_printf(seq, "Connections in use: %u\n",
+			   atomic_read(&t->conns_in_use));
+		seq_printf(seq, "TID range: %u..%u", t->tid_base,
+			   t->tid_base + t->ntids - 1);
+		seq_printf(seq, ", in use: %u\n",
+			   atomic_read(&t->tids_in_use));
+	}
+
+	if (t->nstids)
+		seq_printf(seq, "STID range: %u..%u, in use-IPv4/IPv6: %u/%u\n",
+			   (!t->stid_base &&
+			   (chip_ver <= CHELSIO_T5)) ?
+			   t->stid_base + 1 : t->stid_base,
+			   t->stid_base + t->nstids - 1,
+			   t->stids_in_use - t->v6_stids_in_use,
+			   t->v6_stids_in_use);
+	if (t->natids)
+		seq_printf(seq, "ATID range: 0..%u, in use: %u\n",
+			t->natids - 1, t->atids_in_use);
+	seq_printf(seq, "FTID range: %u..%u\n", t->ftid_base,
+		   t->ftid_base + t->nftids - 1);
+	if (t->nsftids)
+		seq_printf(seq, "SFTID range: %u..%u in use: %u\n",
+			   t->sftid_base, t->sftid_base + t->nsftids - 2,
+			   t->sftids_in_use);
+	if (t->nhpftids && (chip_ver > CHELSIO_T5))
+		seq_printf(seq, "HPFTID range: %u..%u\n", t->hpftid_base,
+			   t->hpftid_base + t->nhpftids - 1);
+	if (t->neotids)
+		seq_printf(seq, "UOTID range: %u..%u, in use: %u\n", t->eotid_base,
+			   t->eotid_base + t->neotids - 1, atomic_read(&t->eotids_in_use));
+	if (t->ntids)
+		seq_printf(seq, "HW TID usage: %u IP users, %u IPv6 users\n",
+			   t4_read_reg(adap, LE_DB_ACT_CNT_IPV4_A),
+			   t4_read_reg(adap, LE_DB_ACT_CNT_IPV6_A));
+	return 0;
+}
+
+DEFINE_SIMPLE_DEBUGFS_FILE(tid_info);
+
+#if 0
+static int tids_info_show(struct seq_file *seq, void *v)
+{
+	struct adapter *adap = seq->private;
 	const struct cxgb4_tid_info *t;
 
 	if (!(adap->flags & CXGB4_FULL_INIT_DONE))
@@ -3915,7 +3997,8 @@ static int tid_info_show(struct seq_file *seq, void *v)
 				t4_read_reg(adap, LE_DB_ACT_CNT_IPV6_A));
 	return 0;
 }
-DEFINE_SIMPLE_DEBUGFS_FILE(tid_info);
+DEFINE_SIMPLE_DEBUGFS_FILE(tids_info);
+#endif
 
 static ssize_t blocked_fl_read(struct file *filp, char __user *ubuf,
 			       size_t count, loff_t *ppos)

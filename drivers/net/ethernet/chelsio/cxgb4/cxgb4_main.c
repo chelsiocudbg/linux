@@ -194,6 +194,7 @@ static struct net_device_ops cxgb4_netdev_ops;
 LIST_HEAD(adapter_list);
 DEFINE_MUTEX(uld_mutex);
 LIST_HEAD(uld_list);
+struct cxgb4_uld_info cxgb4_ulds[CXGB4_ULD_TYPE_MAX];
 unsigned int cxgb4_modparam_enable_ulds(void)
 {
 	return enable_ulds;
@@ -731,7 +732,7 @@ static int fwevtq_handler(struct sge_rspq *q, const __be64 *rsp,
 #if IS_ENABLED(CONFIG_CHELSIO_IPSEC_INLINE)
        if (unlikely(opcode == CPL_FW6_MSG &&
            ((const struct cpl_fw6_msg *)rsp)->type == FW_TYPE_IPSEC_SA)) {
-               struct cxgb4_uld_info *uld = adap->uld[CXGB4_ULD_IPSEC];
+               struct cxgb4_uld_info *uld = &cxgb4_ulds[CXGB4_ULD_IPSEC];
 
                uld->rx_handler(q->adap->uld[CXGB4_ULD_IPSEC].handle,
                                rsp, gl);
@@ -744,7 +745,7 @@ static int fwevtq_handler(struct sge_rspq *q, const __be64 *rsp,
 		unsigned int qid = EGR_QID_G(ntohl(p->opcode_qid));
 		struct sge_txq *txq;
 
-		txq = cxgb4_sge_egr_map_get(&q->adap->sge.egr_map, qid);
+		txq = q->adap->sge.egr_map[qid - q->adap->sge.egr_start];
 		if (txq->q_type == CXGB4_TXQ_ETH) {
 			struct sge_eth_txq *eq;
 
@@ -804,15 +805,15 @@ static int fwevtq_handler(struct sge_rspq *q, const __be64 *rsp,
 	} else if (opcode == CPL_SET_TCB_RPL) {
 		const struct cpl_set_tcb_rpl *p = (void *)rsp;
 
-		filter_rpl(q->adap, p);
+		cxgb4_filter_normal_rpl(q->adap, p);
 	} else if (opcode == CPL_ACT_OPEN_RPL) {
 		const struct cpl_act_open_rpl *p = (void *)rsp;
 
-		hash_filter_rpl(q->adap, p);
+		cxgb4_filter_hash_create_rpl(q->adap, p);
 	} else if (opcode == CPL_ABORT_RPL_RSS) {
 		const struct cpl_abort_rpl_rss *p = (void *)rsp;
 
-		hash_del_filter_rpl(q->adap, p);
+		cxgb4_filter_hash_delete_rpl(q->adap, p);
 	} else if (opcode == CPL_SRQ_TABLE_RPL) {
 		const struct cpl_srq_table_rpl *p = (void *)rsp;
 
@@ -1934,6 +1935,57 @@ int cxgb4_flush_eq_cache(struct net_device *dev)
 }
 EXPORT_SYMBOL(cxgb4_flush_eq_cache);
 
+static int read_eq_indices(struct adapter *adap, u16 qid, u16 *pidx, u16 *cidx)
+{
+	u32 addr = t4_read_reg(adap, SGE_DBQ_CTXT_BADDR_A) + 24 * qid + 8;
+	__be64 indices;
+	int ret;
+
+	spin_lock(&adap->win0_lock);
+	ret = t4_memory_rw(adap, 0, MEM_EDC0, addr,
+			sizeof(indices), (__be32 *)&indices,
+			T4_MEMORY_READ);
+	spin_unlock(&adap->win0_lock);
+	if (!ret) {
+		*cidx = (be64_to_cpu(indices) >> 25) & 0xffff;
+		*pidx = (be64_to_cpu(indices) >> 9) & 0xffff;
+	}
+	return ret;
+}
+
+int cxgb4_sync_txq_pidx(struct net_device *dev, u16 qid, u16 pidx,
+		u16 size)
+{
+	struct adapter *adap = netdev2adap(dev);
+	u16 hw_pidx, hw_cidx;
+	int ret;
+
+	ret = read_eq_indices(adap, qid, &hw_pidx, &hw_cidx);
+	if (ret)
+		goto out;
+
+	if (pidx != hw_pidx) {
+		u16 delta;
+		u32 val;
+
+		if (pidx >= hw_pidx)
+			delta = pidx - hw_pidx;
+		else
+			delta = size - hw_pidx + pidx;
+
+		if (is_t4(adap->params.chip))
+			val = PIDX_V(delta);
+		else
+			val = PIDX_T5_V(delta);
+		wmb();
+		t4_write_reg(adap, MYPF_REG(SGE_PF_KDOORBELL_A),
+				QID_V(qid) | val);
+	}
+out:
+	return ret;
+}
+EXPORT_SYMBOL(cxgb4_sync_txq_pidx);
+
 int cxgb4_read_tpte(struct net_device *dev, u32 stag, __be32 *tpte)
 {
 	struct adapter *adap = netdev2adap(dev);
@@ -1980,47 +2032,6 @@ static void notify_rdma_uld(struct adapter *adap, enum cxgb4_control cmd)
 		adap->uld[type].control(adap->uld[type].handle, cmd);
 }
 
-static void cxgb4_recover_all_queues(struct adapter *adap)
-{
-	int i;
-	for_each_ethrxq(&adap->sge, i) {
-		struct sge_rspq *rspq = &adap->sge.ethrxq[i].rspq;
-		cxgb4_sge_txq_sync_pidx_locked(rspq->netdev,
-				&adap->sge.ethtxq[i].q);
-	}
-	cxgb4_uld_txq_all_recover(adap);
-	for_each_port(adap, i) {
-		cxgb4_sge_txq_sync_pidx_locked(adap->port[0],
-				&adap->sge.ctrlq[i].q);
-		cxgb4_sge_txq_sync_pidx_locked(adap->port[0],
-				&adap->sge.ctrlq[NCHAN + i].q);
-	}
-}
-
-static void cxgb4_enable_dbs(struct adapter *adap)
-{
-        int i;
-
-        for_each_ethrxq(&adap->sge, i)
-                cxgb4_sge_txq_enable_db(adap, &adap->sge.ethtxq[i].q);
-        cxgb4_uld_txq_all_enable_dbs(adap);
-        for_each_port(adap, i) {
-                cxgb4_sge_txq_enable_db(adap, &adap->sge.ctrlq[i].q);
-                cxgb4_sge_txq_enable_db(adap, &adap->sge.ctrlq[NCHAN + i].q);
-        }
-}
-
-static void cxgb4_disable_dbs(struct adapter *adap)
-{
-	int i;
-	for_each_ethrxq(&adap->sge, i)
-		cxgb4_sge_txq_disable_db(&adap->sge.ethtxq[i].q);
-	cxgb4_uld_txq_all_disable_dbs(adap);
-	for_each_port(adap, i) {
-		cxgb4_sge_txq_disable_db(&adap->sge.ctrlq[i].q);
-		cxgb4_sge_txq_disable_db(&adap->sge.ctrlq[NCHAN + i].q);
-	}
-}
 
 static void drain_db_fifo(struct adapter *adap, int usecs)
 {
@@ -2043,13 +2054,82 @@ static void drain_db_fifo(struct adapter *adap, int usecs)
 	} while (1);
 }
 
+static void disable_txq_db(struct sge_txq *q)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&q->db_lock, flags);
+	q->db_disabled = 1;
+	spin_unlock_irqrestore(&q->db_lock, flags);
+}
+
+static void enable_txq_db(struct adapter *adap, struct sge_txq *q)
+{
+	spin_lock_irq(&q->db_lock);
+	if (q->db_pidx_inc) {
+		/* Make sure that all writes to the TX descriptors
+		 * are committed before we tell HW about them.
+		 */
+		wmb();
+		t4_write_reg(adap, MYPF_REG(SGE_PF_KDOORBELL_A),
+				QID_V(q->cntxt_id) | PIDX_V(q->db_pidx_inc));
+		q->db_pidx_inc = 0;
+	}
+	q->db_disabled = 0;
+	spin_unlock_irq(&q->db_lock);
+}
+
+static void disable_dbs(struct adapter *adap)
+{
+	int i;
+
+	for_each_ethrxq(&adap->sge, i)
+		disable_txq_db(&adap->sge.ethtxq[i].q);
+	if (is_offload(adap)) {
+		struct sge_uld_txq_info *txq_info =
+			adap->sge.uld_txq_info[CXGB4_TX_OFLD];
+
+		if (txq_info) {
+			for_each_ofldtxq(&adap->sge, i) {
+				struct sge_uld_txq *txq = &txq_info->uldtxq[i];
+
+				disable_txq_db(&txq->q);
+			}
+		}
+	}
+	for_each_port(adap, i)
+		disable_txq_db(&adap->sge.ctrlq[i].q);
+}
+
+static void enable_dbs(struct adapter *adap)
+{
+	int i;
+
+	for_each_ethrxq(&adap->sge, i)
+		enable_txq_db(adap, &adap->sge.ethtxq[i].q);
+	if (is_offload(adap)) {
+		struct sge_uld_txq_info *txq_info =
+			adap->sge.uld_txq_info[CXGB4_TX_OFLD];
+
+		if (txq_info) {
+			for_each_ofldtxq(&adap->sge, i) {
+				struct sge_uld_txq *txq = &txq_info->uldtxq[i];
+
+				enable_txq_db(adap, &txq->q);
+			}
+		}
+	}
+	for_each_port(adap, i)
+		enable_txq_db(adap, &adap->sge.ctrlq[i].q);
+}
+
 static void process_db_full(struct work_struct *work)
 {
 	struct adapter *adap;
 
 	adap = container_of(work, struct adapter, db_full_task);
 	drain_db_fifo(adap, dbfifo_drain_delay);
-	cxgb4_enable_dbs(adap);
+	enable_dbs(adap);
 	notify_rdma_uld(adap, CXGB4_CONTROL_DB_EMPTY);
 	adap->db_stats.db_empty++;
 	if (CHELSIO_CHIP_VERSION(adap->params.chip) <= CHELSIO_T5)
@@ -2059,6 +2139,61 @@ static void process_db_full(struct work_struct *work)
 	else
 		t4_set_reg_field(adap, SGE_INT_ENABLE3_A,
 				DBFIFO_LP_INT_F, DBFIFO_LP_INT_F);
+}
+
+static void sync_txq_pidx(struct adapter *adap, struct sge_txq *q)
+{
+	u16 hw_pidx, hw_cidx;
+	int ret;
+
+	spin_lock_irq(&q->db_lock);
+	ret = read_eq_indices(adap, (u16)q->cntxt_id, &hw_pidx, &hw_cidx);
+	if (ret)
+		goto out;
+	if (q->db_pidx != hw_pidx) {
+		u16 delta;
+		u32 val;
+
+		if (q->db_pidx >= hw_pidx)
+			delta = q->db_pidx - hw_pidx;
+		else
+			delta = q->size - hw_pidx + q->db_pidx;
+
+		if (is_t4(adap->params.chip))
+			val = PIDX_V(delta);
+		else
+			val = PIDX_T5_V(delta);
+		wmb();
+		t4_write_reg(adap, MYPF_REG(SGE_PF_KDOORBELL_A),
+				QID_V(q->cntxt_id) | val);
+	}
+out:
+	q->db_disabled = 0;
+	q->db_pidx_inc = 0;
+	spin_unlock_irq(&q->db_lock);
+	if (ret)
+		CH_WARN(adap, "DB drop recovery failed.\n");
+}
+
+static void recover_all_queues(struct adapter *adap)
+{
+	int i;
+
+	for_each_ethrxq(&adap->sge, i)
+		sync_txq_pidx(adap, &adap->sge.ethtxq[i].q);
+	if (is_offload(adap)) {
+		struct sge_uld_txq_info *txq_info =
+			adap->sge.uld_txq_info[CXGB4_TX_OFLD];
+		if (txq_info) {
+			for_each_ofldtxq(&adap->sge, i) {
+				struct sge_uld_txq *txq = &txq_info->uldtxq[i];
+
+				sync_txq_pidx(adap, &txq->q);
+			}
+		}
+	}
+	for_each_port(adap, i)
+		sync_txq_pidx(adap, &adap->sge.ctrlq[i].q);
 }
 
 static void process_db_drop(struct work_struct *work)
@@ -2071,9 +2206,9 @@ static void process_db_drop(struct work_struct *work)
 		drain_db_fifo(adap, dbfifo_drain_delay);
 		notify_rdma_uld(adap, CXGB4_CONTROL_DB_DROP);
 		drain_db_fifo(adap, dbfifo_drain_delay);
-		cxgb4_recover_all_queues(adap);
+		recover_all_queues(adap);
 		drain_db_fifo(adap, dbfifo_drain_delay);
-		cxgb4_enable_dbs(adap);
+		enable_dbs(adap);
 		notify_rdma_uld(adap, CXGB4_CONTROL_DB_EMPTY);
 	} else if (is_t5(adap->params.chip)) {
 		u32 dropped_db = t4_read_reg(adap, 0x010ac);
@@ -2162,8 +2297,6 @@ static void attach_ulds(struct adapter *adap)
                 mutex_lock(&adap->uld_inst.uld_mutex);
 		if (adap->uld[i].add) {
 			cxgb4_uld_alloc_resources(adap, i, &adap->uld[i]);
-                        if (adap->flags & CXGB4_FULL_INIT_DONE)
-                                cxgb4_uld_txq_alloc_shared(adap, i);
                         uld_attach(adap, i);
                 }
                 mutex_unlock(&adap->uld_inst.uld_mutex);
@@ -2187,8 +2320,6 @@ static void detach_ulds(struct adapter *adap)
 		if (adap->uld[i].handle) {
 			adap->uld[i].state_change(adap->uld[i].handle,
 					CXGB4_STATE_DETACH);
-			if (adap->flags & CXGB4_FULL_INIT_DONE)
-				cxgb4_uld_txq_free_shared(adap, i);
 		}
 		mutex_unlock(&adap->uld_inst.uld_mutex);
 	}
@@ -2203,7 +2334,7 @@ static void detach_ulds(struct adapter *adap)
 void t4_db_full(struct adapter *adap)
 {
 	if (is_t4(adap->params.chip)) {
-		cxgb4_disable_dbs(adap);
+		disable_dbs(adap);
 		notify_rdma_uld(adap, CXGB4_CONTROL_DB_FULL);
 		t4_set_reg_field(adap, SGE_INT_ENABLE3_A,
 				 DBFIFO_HP_INT_F | DBFIFO_LP_INT_F, 0);
@@ -2214,7 +2345,7 @@ void t4_db_full(struct adapter *adap)
 void t4_db_dropped(struct adapter *adap)
 {
 	if (is_t4(adap->params.chip)) {
-		cxgb4_disable_dbs(adap);
+		disable_dbs(adap);
 		notify_rdma_uld(adap, CXGB4_CONTROL_DB_FULL);
 	}
 	cxgb4_work_queue(adap->workq, &adap->db_drop_task);
@@ -2339,7 +2470,6 @@ static int cxgb_up(struct adapter *adap)
 {
 	struct sge *s = &adap->sge;
 	int err;
-	u8 i;
 
 	mutex_lock(&uld_mutex);
 	err = setup_sge_queues(adap);
@@ -2382,12 +2512,6 @@ static int cxgb_up(struct adapter *adap)
 	adap->flags |= CXGB4_FULL_INIT_DONE;
 	mutex_unlock(&uld_mutex);
 
-	for (i = 0; i < CXGB4_ULD_TYPE_MAX; i++) {
-		mutex_lock(&adap->uld_inst.uld_mutex);
-		if (adap->uld[i].handle)
-			cxgb4_uld_txq_alloc_shared(adap, i);
-		mutex_unlock(&adap->uld_inst.uld_mutex);
-	}
 	notify_ulds(adap, CXGB4_STATE_UP);
 #if IS_ENABLED(CONFIG_IPV6)
 	update_clip(adap);
@@ -2414,7 +2538,6 @@ static void cxgb_down(struct adapter *adapter)
 	for (i = 0; i < CXGB4_ULD_TYPE_MAX; i++) {
 		mutex_lock(&adapter->uld_inst.uld_mutex);
 		if (adapter->uld[i].handle)
-			cxgb4_uld_txq_free_shared(adapter, i);
 		mutex_unlock(&adapter->uld_inst.uld_mutex);
 	}
 
@@ -3698,22 +3821,6 @@ free_hma:
 	return ret;
 }
 
-/* If we're a pure NIC driver then disable all offloading facilities.
- * This will allow the firmware to optimize aspects of the hardware
- * configuration which will result in improved performance.
- */
-static void cxgb4_offload_caps_remove(struct adapter *adap,
-				      struct fw_caps_config_cmd *caps_cmd)
-{
-       caps_cmd->niccaps &= htons(~FW_CAPS_CONFIG_NIC_ETHOFLD);
-       caps_cmd->ofldcaps = 0;
-       caps_cmd->iscsicaps = 0;
-       caps_cmd->nvmecaps = 0;
-       caps_cmd->rdmacaps = 0;
-       caps_cmd->fcoecaps = 0;
-       caps_cmd->cryptocaps = 0;
-}
-
 static int adap_init1(struct adapter *adap, struct fw_caps_config_cmd *c)
 {
 	u32 v;
@@ -3797,6 +3904,17 @@ static int adap_init1(struct adapter *adap, struct fw_caps_config_cmd *c)
 	/* get basic stuff going */
 	return t4_early_init(adap, adap->pf);
 }
+
+/*
+ * Max # of ATIDs.  The absolute HW max is 16K but we keep it lower.
+ */
+#define MAX_ATIDS 8192U
+
+#ifdef CONFIG_PO_FCOE
+#if MAX_ATIDS > 8192U
+#error "MAX_ATIDS > 8192"
+#endif
+#endif /* CONFIG_PO_FCOE */
 
 /*
  * Phase 0 of initialization: contact FW, obtain config, perform basic init.
@@ -4544,16 +4662,33 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 	params[0] = FW_PARAM_PFVF(EQ_START);
 	params[1] = FW_PARAM_PFVF(L2T_START);
 	params[2] = FW_PARAM_PFVF(L2T_END);
-	params[3] = FW_PARAM_PFVF(IQFLINT_START);
-	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 4, params, val);
+	params[3] = FW_PARAM_PFVF(FILTER_START);
+	params[4] = FW_PARAM_PFVF(FILTER_END);
+	params[5] = FW_PARAM_PFVF(IQFLINT_START);
+	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 6, params, val);
 	if (ret < 0)
 		goto bye;
 	adap->sge.egr_start = val[0];
 	adap->l2t_start = val[1];
 	adap->l2t_end = val[2];
-	adap->sge.ingr_start = val[3];
+	adap->tids.ftid_base = val[3];
+	adap->tids.nftids = val[4] - val[3] + 1;
+	adap->sge.ingr_start = val[5];
 
+	/* T6 TCAM can contain about 4 regions
+	 * (Hi-Priority filter, Active, Server and
+	 * Normal priority filter regions).
+	 */
 	if (chip_ver > CHELSIO_T5) {
+		params[0] = FW_PARAM_PFVF(HPFILTER_START);
+		params[1] = FW_PARAM_PFVF(HPFILTER_END);
+		ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2,
+				      params, val);
+		if (ret < 0)
+			goto bye;
+		adap->tids.hpftid_base = val[0];
+		adap->tids.nhpftids = val[1] - val[0] + 1;
+
 		/* Read the raw mps entries. In T6, the last 2 tcam entries
 		 * are reserved for raw mac addresses (rawf = 2, one per port).
 		 */
@@ -4582,9 +4717,22 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 	adap->sge.egr_sz = val[0] - adap->sge.egr_start + 1;
 	adap->sge.ingr_sz = val[1] - adap->sge.ingr_start + 1;
 
-	cxgb4_sge_egr_map_init(adap);
+	adap->sge.egr_map = kcalloc(adap->sge.egr_sz,
+			sizeof(*adap->sge.egr_map), GFP_KERNEL);
+	if (!adap->sge.egr_map) {
+		ret = -ENOMEM;
+		goto bye;
+	}
+
+	adap->sge.txq_maperr = kcalloc(BITS_TO_LONGS(adap->sge.egr_sz),
+			sizeof(long), GFP_KERNEL);
+	if (!adap->sge.txq_maperr) {
+		ret = -ENOMEM;
+		goto bye;
+	}
+
 	adap->sge.ingr_map = kzalloc_objs(*adap->sge.ingr_map,
-					  adap->sge.ingr_sz);
+			adap->sge.ingr_sz);
 	if (!adap->sge.ingr_map) {
 		ret = -ENOMEM;
 		goto bye;
@@ -4626,6 +4774,19 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 		adap->params.nsched_cls = is_t4(adap->params.chip) ? 15 : 16;
 	} else {
 		adap->params.nsched_cls = val[0];
+	}
+
+	/* query params related to active filter region */
+	params[0] = FW_PARAM_PFVF(ACTIVE_FILTER_START);
+	params[1] = FW_PARAM_PFVF(ACTIVE_FILTER_END);
+	ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2, params, val);
+	/* If Active filter size is set we enable establishing
+	 * offload connection through firmware work request
+	 */
+	if ((val[0] != val[1]) && (ret >= 0)) {
+		adap->flags |= CXGB4_FW_OFLD_CONN;
+		adap->tids.aftid_base = val[0];
+		adap->tids.aftid_end = val[1];
 	}
 
 	/* If we're running on newer firmware, let it know that we're
@@ -4690,17 +4851,6 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 	if (ret < 0)
 		goto bye;
 
-	ret = cxgb4_tid_info_init(adap, &caps_cmd);
-	if (ret) {
-		dev_warn(adap->pdev_dev,
-				"could not allocate TID table, continuing\n");
-		cxgb4_offload_caps_remove(adap, &caps_cmd);
-		caps_cmd.niccaps &= htons(~FW_CAPS_CONFIG_NIC_HASHFILTER);
-	}
-
-	if (cxgb4_hash_filter_init(adap) < 0)
-		goto bye;
-
 	ret = cxgb4_uld_init(adap, &caps_cmd);
 	if (ret)
 		goto bye;
@@ -4754,7 +4904,8 @@ bye:
 	adap_free_hma_mem(adap);
 
 	cxgb4_uld_cleanup(adap);
-	cxgb4_sge_egr_map_destroy(adap);
+	kfree(adap->sge.egr_map);
+	kfree(adap->sge.txq_maperr);
 	kfree(adap->sge.ingr_map);
 	bitmap_free(adap->sge.starving_fl);
 #ifdef CONFIG_DEBUG_FS
@@ -5184,6 +5335,160 @@ bool cxgb4_msi_enabled(struct adapter *adap)
 	return cxgb4_pci_msi_enabled(adap);
 }
 
+/* Return an error number if the indicated filter isn't writable ...
+ */
+int writable_filter(struct filter_entry *f)
+{
+	if (f->locked)
+		return -EPERM;
+	if (f->pending)
+		return -EBUSY;
+
+	return 0;
+}
+
+#ifdef CONFIG_CHELSIO_T4_OFFLOAD
+
+int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
+		__be32 sip, __be16 sport, __be16 vlan,
+		unsigned int queue, unsigned char port, unsigned char mask)
+{
+	int ret;
+	struct filter_entry *f;
+	struct adapter *adap;
+	int i;
+	u8 *val;
+
+	adap = netdev2adap(dev);
+
+	/* Adjust stid to correct filter index */
+	stid -= adap->tids.sftid_base;
+	stid += adap->tids.nftids;
+
+	/* Check to make sure the filter requested is writable ...
+	 */
+	f = &adap->tids.ftid_tab[stid];
+	ret = writable_filter(f);
+	if (ret)
+		return ret;
+
+	/* Clear out any old resources being used by the filter before
+	 * we start constructing the new filter.
+	 */
+	if (f->valid)
+		clear_filter(adap, f);
+
+	/* Clear out filter specifications */
+	memset(&f->fs, 0, sizeof(struct ch_filter_specification));
+	f->fs.val.lport = cpu_to_be16(sport);
+	f->fs.mask.lport  = ~0;
+	val = (u8 *)&sip;
+	if ((val[0] | val[1] | val[2] | val[3]) != 0) {
+		for (i = 0; i < 4; i++) {
+			f->fs.val.lip[i] = val[i];
+			f->fs.mask.lip[i] = ~0;
+		}
+		if (adap->params.tp.vlan_pri_map & F_PORT) {
+			f->fs.val.iport = port;
+			f->fs.mask.iport = mask;
+		}
+	}
+
+	if (adap->params.tp.vlan_pri_map & F_PROTOCOL) {
+		f->fs.val.proto = IPPROTO_TCP;
+		f->fs.mask.proto = ~0;
+	}
+
+	/*
+	 * This code demonstrates how one would selectively Offload
+	 * (TOE) certain incoming connections by using the extended
+	 * "Filter Information" capabilities of Server Control Blocks
+	 * (SCB).  (See "Classification and Filtering" in the T4 Data
+	 * Book for a description of Ingress Packet pattern matching
+	 * capabilities.  See also documentation on the
+	 * TP_VLAN_PRI_MAP register.)  Because this selective
+	 * Offloading is happening in the chip, this allows
+	 * non-Offloading and Offloading drivers to coexist.  For
+	 * example, an Offloading Driver might be running in a
+	 * Hypervisor while non-Offloading vNIC Drivers might be
+	 * running in Virtual Machines.
+	 *
+	 * This particular example code demonstrates how one would
+	 * selectively Offload incoming connections based on VLANs.
+	 * We allow one VLAN to be designated as the "Offloading
+	 * VLAN".  Ingress SYNs on this Offload VLAN will match the
+	 * filter which we put into the Listen SCB and will result in
+	 * Offloaded Connections on that VLAN.  Incoming SYNs on other
+	 * VLANs will not match and will go through normal NIC
+	 * processing.
+	 *
+	 * This is not production code since one would want a lot more
+	 * infrastructure to allow a variety of filter specifications
+	 * on a per-server basis.  But this demonstrates the
+	 * fundamental mechanisms one would use to build such an
+	 * infrastructure.
+	 *
+	 */
+	if (vlan && (adap->params.tp.vlan_pri_map & F_VLAN)) {
+		f->fs.val.ivlan_vld = 1;
+		f->fs.val.ivlan = be16_to_cpu(vlan);
+		f->fs.mask.ivlan_vld = ~0;
+		f->fs.mask.ivlan = ~0;
+	}
+
+	f->fs.dirsteer = 1;
+	f->fs.iq = queue;
+	/* Mark filter as locked */
+	f->locked = 1;
+	f->fs.rpttid = 1;
+
+	/* Save the actual tid. We need this to get the corresponding
+	 * filter entry structure in filter_rpl.
+	 */
+	f->tid = stid + adap->tids.ftid_base;
+	ret = set_filter_wr(adap, stid, GFP_KERNEL);
+	if (ret) {
+		clear_filter(adap, f);
+		return ret;
+	}
+
+	return 0;
+}
+EXPORT_SYMBOL(cxgb4_create_server_filter);
+
+int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
+		unsigned int queue, bool ipv6)
+{
+	int ret;
+	struct filter_entry *f;
+	struct adapter *adap;
+
+	adap = netdev2adap(dev);
+
+	/* Adjust stid to correct filter index */
+	stid -= adap->tids.sftid_base;
+	stid += adap->tids.nftids;
+
+	f = &adap->tids.ftid_tab[stid];
+	/* Unlock the filter */
+	f->locked = 0;
+
+	ret = delete_filter(adap, stid, GFP_KERNEL);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+EXPORT_SYMBOL(cxgb4_remove_server_filter);
+
+int cxgb4_filter_field_shift(const struct net_device *dev, int filter_sel)
+{
+	return t4_filter_field_shift(netdev2adap(dev), filter_sel);
+}
+EXPORT_SYMBOL(cxgb4_filter_field_shift);
+
+#endif /* CONFIG_CHELSIO_T4_OFFLOAD */
+
 /*
  * Reduce the number of Ethernet queues across all ports to at most n.
  * n provides at least one queue per port.
@@ -5570,13 +5875,13 @@ static void free_some_resources(struct adapter *adapter)
 	kvfree(adapter->l2t);
 	t4_cleanup_sched(adapter);
 	kvfree(adapter->tids.tid_tab);
-	cxgb4_tid_info_cleanup(adapter);
 	cxgb4_cleanup_tc_matchall(adapter);
 	cxgb4_cleanup_tc_mqprio(adapter);
 	cxgb4_cleanup_tc_flower(adapter);
 	cxgb4_cleanup_tc_u32(adapter);
 	cxgb4_cleanup_ethtool_filters(adapter);
-	cxgb4_sge_egr_map_destroy(adapter);
+	kfree(adapter->sge.egr_map);
+	kfree(adapter->sge.txq_maperr);
 	kfree(adapter->sge.ingr_map);
 	bitmap_free(adapter->sge.starving_fl);
 #ifdef CONFIG_DEBUG_FS
@@ -6076,6 +6381,7 @@ int cxgb4_adap_probe(struct adapter *adapter)
 	spin_lock_init(&adapter->stats_lock);
 	spin_lock_init(&adapter->win0_lock);
 
+	INIT_WORK(&adapter->tid_release_task, process_tid_release_list);
 	INIT_WORK(&adapter->db_full_task, process_db_full);
 	INIT_WORK(&adapter->db_drop_task, process_db_drop);
 	INIT_WORK(&adapter->fatal_err_notify_task, notify_fatal_err);
@@ -6220,6 +6526,8 @@ int cxgb4_adap_probe(struct adapter *adapter)
 					      hex2val(na[2 * i + 1]));
 			t4_set_hw_addr(adapter, 0, hw_addr);
 		}
+
+		adapter->tids.tid_base = t4_read_reg(adapter, LE_DB_ACTIVE_TABLE_START_INDEX_A);
 	}
 
 	if (!(adapter->flags & CXGB4_FW_OK))
@@ -6274,7 +6582,7 @@ int cxgb4_adap_probe(struct adapter *adapter)
 	}
 
 	if (tid_init(&adapter->tids) < 0) {
-		dev_warn(&pdev->dev, "could not allocate TID table, "
+		dev_warn(adapter->pdev_dev, "could not allocate TID table, "
 				"continuing\n");
 		adapter->params.offload = 0;
 	} else {
@@ -6376,10 +6684,8 @@ fw_attach_fail:
 		cxgb4_setup_debugfs(adapter);
 	}
 
-	if (cxgb4_uld_supported_any(adapter)) {
-		cxgb4_uld_queues_init(adapter);
+	if (cxgb4_uld_supported_any(adapter))
 		attach_ulds(adapter);
-	}
 
 	if (!is_t4(adapter->params.chip))
 		cxgb4_ptp_init(adapter);
@@ -6435,7 +6741,6 @@ void cxgb4_adap_remove(struct adapter *adapter)
 		if (cxgb4_uld_supported_any(adapter)) {
 			if (!list_empty(&adapter->list_node))
 				detach_ulds(adapter);
-			cxgb4_uld_queues_cleanup(adapter);
 			t4_uld_clean_up(adapter);
 		}
 		cxgb4_uld_cleanup(adapter);
@@ -6514,7 +6819,6 @@ void cxgb4_adap_shutdown(struct adapter *adapter)
 
 		if (cxgb4_uld_supported_any(adapter)) {
 			detach_ulds(adapter);
-			cxgb4_uld_queues_cleanup(adapter);
 			t4_uld_clean_up(adapter);
 		}
 
