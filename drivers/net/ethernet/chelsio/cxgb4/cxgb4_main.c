@@ -89,43 +89,24 @@
 #include "cxgb4_tc_matchall.h"
 #include "cxgb4_ptp.h"
 #include "cxgb4_cudbg.h"
+#include "cxgb4_common.h"
 
 char cxgb4_driver_name[] = KBUILD_MODNAME;
 
-#define DRV_DESC "Chelsio T4/T5/T6 Network Driver"
+#define DRV_DESC "Chelsio T4/T5/T6/T7 Network Driver"
 
 #define DFLT_MSG_ENABLE (NETIF_MSG_DRV | NETIF_MSG_PROBE | NETIF_MSG_LINK | \
 			 NETIF_MSG_TIMER | NETIF_MSG_IFDOWN | NETIF_MSG_IFUP |\
 			 NETIF_MSG_RX_ERR | NETIF_MSG_TX_ERR)
 
-/* Macros needed to support the PCI Device ID Table ...
- */
-#define CH_PCI_DEVICE_ID_TABLE_DEFINE_BEGIN \
-	static const struct pci_device_id cxgb4_pci_tbl[] = {
-#define CXGB4_UNIFIED_PF 0x4
-
-#define CH_PCI_DEVICE_ID_FUNCTION CXGB4_UNIFIED_PF
-
-/* Include PCI Device IDs for both PF4 and PF0-3 so our PCI probe() routine is
- * called for both.
- */
-#define CH_PCI_DEVICE_ID_FUNCTION2 0x0
-
-#define CH_PCI_ID_TABLE_ENTRY(devid) \
-		{ PCI_VDEVICE(CHELSIO, (devid)), .driver_data = CXGB4_UNIFIED_PF }
-
-#define CH_PCI_DEVICE_ID_TABLE_DEFINE_END \
-		{ } \
-	}
-
-#include "t4_pci_id_tbl.h"
-
 #define FW4_FNAME "cxgb4/t4fw.bin"
 #define FW5_FNAME "cxgb4/t5fw.bin"
 #define FW6_FNAME "cxgb4/t6fw.bin"
+#define FW7_FNAME "cxgb4/t7fw.bin"
 #define FW4_CFNAME "cxgb4/t4-config.txt"
 #define FW5_CFNAME "cxgb4/t5-config.txt"
 #define FW6_CFNAME "cxgb4/t6-config.txt"
+#define FW7_CFNAME "cxgb4/t7-config.txt"
 #define PHY_AQ1202_FIRMWARE "cxgb4/aq1202_fw.cld"
 #define PHY_BCM84834_FIRMWARE "cxgb4/bcm8483.bin"
 #define PHY_AQ1202_DEVICEID 0x4409
@@ -134,10 +115,10 @@ char cxgb4_driver_name[] = KBUILD_MODNAME;
 MODULE_DESCRIPTION(DRV_DESC);
 MODULE_AUTHOR("Chelsio Communications");
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_DEVICE_TABLE(pci, cxgb4_pci_tbl);
 MODULE_FIRMWARE(FW4_FNAME);
 MODULE_FIRMWARE(FW5_FNAME);
 MODULE_FIRMWARE(FW6_FNAME);
+MODULE_FIRMWARE(FW7_FNAME);
 
 /*
  * The driver uses the best interrupt scheme available on a platform in the
@@ -148,9 +129,8 @@ MODULE_FIRMWARE(FW6_FNAME);
  * msi = 1: only consider MSI and INTx interrupts
  * msi = 0: force INTx interrupts
  */
-static int msi = 2;
-
-module_param(msi, int, 0644);
+static unsigned int msi = 2;
+module_param(msi, uint, 0644);
 MODULE_PARM_DESC(msi, "whether to use INTx (0), MSI (1) or MSI-X (2)");
 
 /*
@@ -217,6 +197,12 @@ static void link_report(struct net_device *dev)
 			break;
 		case 100000:
 			s = "100Gbps";
+			break;
+		case 200000:
+			s = "200Gbps";
+			break;
+		case 400000:
+			s = "400Gbps";
 			break;
 		default:
 			pr_info("%s: unsupported speed: %d\n",
@@ -305,7 +291,8 @@ void t4_os_link_changed(struct adapter *adapter, int port_id, int link_stat)
 void t4_os_portmod_changed(struct adapter *adap, int port_id)
 {
 	static const char *mod_str[] = {
-		NULL, "LR", "SR", "ER", "passive DA", "active DA", "LRM"
+		NULL, "LR", "SR", "ER", "passive DA", "active DA", "LRM",
+		"LR_SIMPLEX", "DR"
 	};
 
 	struct net_device *dev = adap->port[port_id];
@@ -517,7 +504,7 @@ static int link_start(struct net_device *dev)
 		ret = cxgb4_update_mac_filt(pi, pi->viid, &pi->xact_addr_filt,
 					    dev->dev_addr, true, &pi->smt_idx);
 	if (ret == 0)
-		ret = t4_link_l1cfg(pi->adapter, mb, pi->tx_chan,
+		ret = t4_link_l1cfg(pi->adapter, mb, pi->lport,
 				    &pi->link_cfg);
 	if (ret == 0) {
 		local_bh_disable();
@@ -534,9 +521,18 @@ static int link_start(struct net_device *dev)
 static void dcb_rpl(struct adapter *adap, const struct fw_port_cmd *pcmd)
 {
 	int port = FW_PORT_CMD_PORTID_G(ntohl(pcmd->op_to_portid));
-	struct net_device *dev = adap->port[adap->chan_map[port]];
-	int old_dcb_enabled = cxgb4_dcb_enabled(dev);
-	int new_dcb_enabled;
+	int old_dcb_enabled, new_dcb_enabled;
+	struct net_device *dev;
+
+	dev = cxgb4_port_chan_to_netdev(adap, port);
+	if (!dev) {
+		dev_warn(adap->pdev_dev,
+				"Could not get netdevice for handling dcb_rpl for port %d\n",
+				port);
+		return;
+	}
+
+	old_dcb_enabled = cxgb4_dcb_enabled(dev);
 
 	cxgb4_dcb_handle_fw_update(adap, pcmd);
 	new_dcb_enabled = cxgb4_dcb_enabled(dev);

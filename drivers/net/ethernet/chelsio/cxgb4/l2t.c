@@ -47,6 +47,7 @@
 #include "t4fw_api.h"
 #include "t4_regs.h"
 #include "t4_values.h"
+#include "cxgb4_debugfs.h"
 
 /* identifies sync vs async L2T_WRITE_REQs */
 #define SYNC_WR_S    12
@@ -424,10 +425,9 @@ struct l2t_entry *cxgb4_l2t_get(struct l2t_data *d, struct neighbour *neigh,
 	int ifidx = neigh->dev->ifindex;
 	int hash = addr_hash(d, addr, addr_len, ifidx);
 
+	lport = cxgb4_port_chan(physdev);
 	if (neigh->dev->flags & IFF_LOOPBACK)
-		lport = netdev2pinfo(physdev)->tx_chan + 4;
-	else
-		lport = netdev2pinfo(physdev)->lport;
+		lport += 4;
 
 	if (is_vlan_dev(neigh->dev)) {
 		vlan = vlan_dev_vlan_id(neigh->dev);
@@ -726,8 +726,9 @@ static int l2t_seq_open(struct inode *inode, struct file *file)
 	int rc = seq_open(file, &l2t_seq_ops);
 
 	if (!rc) {
-		struct adapter *adap = inode->i_private;
+		struct t4_linux_debugfs_data *d = inode->i_private;
 		struct seq_file *seq = file->private_data;
+		struct adapter *adap = d->adap;
 
 		seq->private = adap->l2t;
 	}

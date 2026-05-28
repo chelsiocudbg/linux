@@ -35,6 +35,7 @@
 
 #include "cxgb4.h"
 #include "t4_regs.h"
+#include "t4_msg.h"
 #include "t4_tcb.h"
 #include "t4_values.h"
 #include "clip_tbl.h"

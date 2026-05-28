@@ -80,7 +80,7 @@ static int uldrx_handler(struct sge_rspq *q, const __be64 *rsp,
 
 	/* FW can send CPLs encapsulated in a CPL_FW4_MSG */
 	if (((const struct rss_header *)rsp)->opcode == CPL_FW4_MSG &&
-	    ((const struct cpl_fw4_msg *)(rsp + 1))->type == FW_TYPE_RSSCPL)
+			((const struct cpl_fw4_msg *)(rsp + 1))->type == FW_TYPE_RSSCPL)
 		rsp += 2;
 
 	if (q->flush_handler)
@@ -117,7 +117,7 @@ static int alloc_uld_rxqs(struct adapter *adap,
 
 	per_chan = rxq_info->nrxq / adap->params.nports;
 
-	if (adap->flags & CXGB4_USING_MSIX)
+	if (adap->flags & CXGB4_USING_INTR_MULTI)
 		msi_idx = 1;
 	else
 		msi_idx = -((int)s->intrq.abs_id + 1);
@@ -169,7 +169,6 @@ freeout:
 	}
 	return err;
 }
-
 static int
 setup_sge_queues_uld(struct adapter *adap, unsigned int uld_type, bool lro)
 {
@@ -738,7 +737,7 @@ static void cxgb4_uld_alloc_resources(struct adapter *adap,
 	ret = setup_sge_queues_uld(adap, type, p->lro);
 	if (ret)
 		goto free_queues;
-	if (adap->flags & CXGB4_USING_MSIX) {
+	if (adap->flags & CXGB4_USING_INTR_MULTI) {
 		ret = request_msix_queue_irqs_uld(adap, type);
 		if (ret)
 			goto free_rxq;

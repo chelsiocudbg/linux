@@ -481,10 +481,14 @@ static inline void ring_fl_db(struct adapter *adap, struct sge_fl *q)
 	if (q->pend_cred >= 8) {
 		u32 val = adap->params.arch.sge_fl_db;
 
-		if (is_t4(adap->params.chip))
-			val |= PIDX_V(q->pend_cred / 8);
-		else
-			val |= PIDX_T5_V(q->pend_cred / 8);
+		if (!cxgb4_is_platform_device(adap)) {
+			if (is_t4(adap->params.chip))
+				val |= PIDX_V(q->pend_cred / 8);
+			else
+				val |= PIDX_T5_V(q->pend_cred / 8);
+		} else {
+			val = ARM_PIDX_V(q->pend_cred / 8);
+		}
 
 		/* Make sure all memory writes to the Free List queue are
 		 * committed before we tell the hardware about them.
@@ -496,8 +500,8 @@ static inline void ring_fl_db(struct adapter *adap, struct sge_fl *q)
 		 * mechanism.
 		 */
 		if (unlikely(q->bar2_addr == NULL)) {
-			t4_write_reg(adap, MYPF_REG(SGE_PF_KDOORBELL_A),
-				     val | QID_V(q->cntxt_id));
+			writel(val | QID_V(q->cntxt_id),
+				adap->sge.tx_db_addr);
 		} else {
 			writel(val | QID_V(q->bar2_qid),
 			       q->bar2_addr + SGE_UDB_KDOORBELL);
@@ -660,12 +664,14 @@ static void *alloc_ring(struct device *dev, size_t nelem, size_t elem_size,
 {
 	size_t len = nelem * elem_size + stat_size;
 	void *s = NULL;
-	void *p = dma_alloc_coherent(dev, len, phys, GFP_KERNEL);
+	void *p = dma_alloc_coherent(dev, len, phys, GFP_NOWAIT);
 
 	if (!p)
+	{
 		return NULL;
+	}
 	if (sw_size) {
-		s = kcalloc_node(sw_size, nelem, GFP_KERNEL, node);
+		s = kcalloc_node(sw_size, nelem, GFP_NOWAIT, node);
 
 		if (!s) {
 			dma_free_coherent(dev, len, p, *phys);
@@ -734,14 +740,14 @@ static inline int is_eth_imm(const struct sk_buff *skb, unsigned int chip_ver)
 	if (skb->encapsulation && skb_shinfo(skb)->gso_size &&
 	    chip_ver > CHELSIO_T5) {
 		hdrlen = sizeof(struct cpl_tx_tnl_lso);
-		hdrlen += sizeof(struct cpl_tx_pkt_core);
 	} else if (skb_shinfo(skb)->gso_type & SKB_GSO_UDP_L4) {
 		return 0;
 	} else {
 		hdrlen = skb_shinfo(skb)->gso_size ?
 			 sizeof(struct cpl_tx_pkt_lso_core) : 0;
-		hdrlen += sizeof(struct cpl_tx_pkt);
 	}
+
+	hdrlen += sizeof(struct cpl_tx_pkt);
 	if (skb->len <= MAX_IMM_TX_PKT_LEN - hdrlen)
 		return hdrlen;
 	return 0;
@@ -1019,16 +1025,21 @@ inline void cxgb4_ring_tx_db(struct adapter *adap, struct sge_txq *q, int n)
 	 * doorbell mechanism; otherwise use the new BAR2 mechanism.
 	 */
 	if (unlikely(q->bar2_addr == NULL)) {
-		u32 val = PIDX_V(n);
 		unsigned long flags;
+		u32 val;
+
+		if (!cxgb4_is_platform_device(adap))
+			val = PIDX_V(n);
+		else
+			val = ARM_PIDX_V(n);
 
 		/* For T4 we need to participate in the Doorbell Recovery
 		 * mechanism.
 		 */
 		spin_lock_irqsave(&q->db_lock, flags);
 		if (!q->db_disabled)
-			t4_write_reg(adap, MYPF_REG(SGE_PF_KDOORBELL_A),
-				     QID_V(q->cntxt_id) | val);
+			writel(val | QID_V(q->cntxt_id),
+				adap->sge.tx_db_addr);
 		else
 			q->db_pidx_inc += n;
 		q->db_pidx = q->pidx;
@@ -1271,11 +1282,13 @@ enum cpl_tx_tnl_lso_type cxgb_encap_offload_supported(struct sk_buff *skb)
 	struct port_info *pi = netdev_priv(skb->dev);
 	struct adapter *adapter = pi->adapter;
 
+	if (!skb->inner_protocol) /* For esp packets skb->inner_protocol is 0 */
+		goto skip;
 	if (skb->inner_protocol_type != ENCAP_TYPE_ETHER ||
 	    skb->inner_protocol != htons(ETH_P_TEB))
 		return tnl_type;
 
-	switch (vlan_get_protocol(skb)) {
+skip: switch (vlan_get_protocol(skb)) {
 	case htons(ETH_P_IP):
 		l4_hdr = ip_hdr(skb)->protocol;
 		break;
@@ -1293,12 +1306,16 @@ enum cpl_tx_tnl_lso_type cxgb_encap_offload_supported(struct sk_buff *skb)
 		else if (adapter->geneve_port == udp_hdr(skb)->dest)
 			tnl_type = TX_TNL_TYPE_GENEVE;
 		break;
+	case IPPROTO_ESP:
+		tnl_type = TX_TNL_TYPE_IPSEC;
+		break;
 	default:
 		return tnl_type;
 	}
 
 	return tnl_type;
 }
+EXPORT_SYMBOL(cxgb_encap_offload_supported);
 
 static inline void t6_fill_tnl_lso(struct sk_buff *skb,
 				   struct cpl_tx_tnl_lso *tnl_lso,
@@ -1589,6 +1606,9 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 			wr_mid |= FW_WR_EQUEQ_F | FW_WR_EQUIQ_F;
 	}
 
+	if (intr_en)
+		wr_mid |= FW_WR_EQUEQ_F | FW_WR_EQUIQ_F;
+
 	wr = (void *)&q->q.desc[q->q.pidx];
 	eowr = (void *)&q->q.desc[q->q.pidx];
 	wr->equiq_to_len16 = htonl(wr_mid);
@@ -1690,7 +1710,7 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif /* CONFIG_CHELSIO_T4_FCOE */
 	}
 
-	ctrl0 = TXPKT_OPCODE_V(CPL_TX_PKT_XT) | TXPKT_INTF_V(pi->tx_chan) |
+	ctrl0 = TXPKT_OPCODE_V(CPL_TX_PKT_XT) | TXPKT_INTF_V(pi->lport) |
 		TXPKT_PF_V(adap->pf);
 	if (ptp_enabled)
 		ctrl0 |= TXPKT_TSTAMP_F;
@@ -1996,7 +2016,7 @@ static netdev_tx_t cxgb4_vf_eth_xmit(struct sk_buff *skb,
 
 	 /* Fill in the TX Packet CPL message header. */
 	cpl->ctrl0 = cpu_to_be32(TXPKT_OPCODE_V(CPL_TX_PKT_XT) |
-				 TXPKT_INTF_V(pi->port_id) |
+				 TXPKT_INTF_V(pi->lport) |
 				 TXPKT_PF_V(0));
 	cpl->pack = cpu_to_be16(0);
 	cpl->len = cpu_to_be16(skb->len);
@@ -2123,8 +2143,6 @@ void cxgb4_eosw_txq_free_desc(struct adapter *adap,
 	while (ndesc--) {
 		if (d->skb) {
 			if (d->addr[0]) {
-				unmap_skb(adap->pdev_dev, d->skb, d->addr);
-				memset(d->addr, 0, sizeof(d->addr));
 			}
 			dev_consume_skb_any(d->skb);
 			d->skb = NULL;
@@ -2748,7 +2766,7 @@ static int ctrl_xmit(struct sge_ctrl_txq *q, struct sk_buff *skb)
 	spin_lock(&q->sendq.lock);
 
 	if (unlikely(q->full)) {
-		skb->priority = ndesc;                  /* save for restart */
+		cxgb4_uld_skb_set_credits(skb, ndesc); /* save for restart */
 		__skb_queue_tail(&q->sendq, skb);
 		spin_unlock(&q->sendq.lock);
 		return NET_XMIT_CN;
@@ -2785,8 +2803,8 @@ static void restart_ctrlq(struct tasklet_struct *t)
 	BUG_ON(txq_avail(&q->q) < TXQ_STOP_THRES);  /* q should be empty */
 
 	while ((skb = __skb_dequeue(&q->sendq)) != NULL) {
+		u8 ndesc = cxgb4_uld_skb_get_credits(skb); /* previously saved */
 		struct fw_wr_hdr *wr;
-		unsigned int ndesc = skb->priority;     /* previously saved */
 
 		written += ndesc;
 		/* Write descriptors and free skbs outside the lock to limit
@@ -2848,17 +2866,22 @@ int t4_mgmt_tx(struct adapter *adap, struct sk_buff *skb)
  *      However, FW_ULPTX_WR commands have a 256 byte immediate only
  *      payload limit.
  */
-static inline int is_ofld_imm(const struct sk_buff *skb)
+static inline int is_ofld_imm(const struct sk_buff *skb, struct adapter *adap)
 {
 	struct work_request_hdr *req = (struct work_request_hdr *)skb->data;
 	unsigned long opcode = FW_WR_OP_G(ntohl(req->wr_hi));
+	bool sendpath_enable = adap->params.tx_sendpath;
 
 	if (unlikely(opcode == FW_ULPTX_WR))
 		return skb->len <= MAX_IMM_ULPTX_WR_LEN;
 	else if (opcode == FW_CRYPTO_LOOKASIDE_WR)
 		return skb->len <= SGE_MAX_WR_LEN;
+	else if (opcode == FW_RI_INIT_WR && CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T7)
+		return skb->len <= MAX_IMM_ROCE_WR_LEN;
+	else if (opcode == FW_NVMET_V2_FR_NSMR_WR)
+		return skb->len <= MAX_IMM_NVMET_V2_FR_NSMR_WR_LEN;
 	else
-		return skb->len <= MAX_IMM_OFLD_TX_DATA_WR_LEN;
+		return skb->len <= ofld_tx_data_wr_max_len(sendpath_enable);
 }
 
 /**
@@ -2869,11 +2892,12 @@ static inline int is_ofld_imm(const struct sk_buff *skb)
  *	These packets are already fully constructed and no additional headers
  *	will be added.
  */
-static inline unsigned int calc_tx_flits_ofld(const struct sk_buff *skb)
+static inline unsigned int calc_tx_flits_ofld(const struct sk_buff *skb,
+						struct adapter *adap)
 {
 	unsigned int flits, cnt;
 
-	if (is_ofld_imm(skb))
+	if (is_ofld_imm(skb, adap))
 		return DIV_ROUND_UP(skb->len, 8);
 
 	flits = skb_transport_offset(skb) / 8U;   /* headers */
@@ -2965,7 +2989,7 @@ static void service_ofldq(struct sge_uld_txq *q)
 
 		cxgb4_reclaim_completed_tx(q->adap, &q->q, false);
 
-		flits = skb->priority;                /* previously saved */
+		flits = cxgb4_uld_skb_get_credits(skb); /* previously saved */
 		ndesc = flits_to_desc(flits);
 		credits = txq_avail(&q->q) - ndesc;
 		BUG_ON(credits < 0);
@@ -2973,7 +2997,7 @@ static void service_ofldq(struct sge_uld_txq *q)
 			ofldtxq_stop(q, (struct fw_wr_hdr *)skb->data);
 
 		pos = (u64 *)&q->q.desc[q->q.pidx];
-		if (is_ofld_imm(skb))
+		if (is_ofld_imm(skb, q->adap))
 			cxgb4_inline_tx_skb(skb, &q->q, pos);
 		else if (cxgb4_map_skb(q->adap->pdev_dev, skb,
 				       (dma_addr_t *)skb->head)) {
@@ -3020,6 +3044,21 @@ static void service_ofldq(struct sge_uld_txq *q)
 			q->q.sdesc[last_desc].skb = skb;
 		}
 
+		/* SENDPATH requires PIDX in some WRs. Update the
+		 * PIDX here.
+		 */
+		if (q->uldtxq->qtype == CXGB4_ULD_TXQ_TYPE_SENDPATH) {
+			const u16 pidx_off = cxgb4_uld_skb_get_pidx_offset(skb);
+
+			if (pidx_off) {
+				__be16 *wr;
+
+				wr = (__be16 *)((u8 *)&q->q.desc[q->q.pidx] +
+						pidx_off);
+				*wr |= cpu_to_be16(q->q.pidx);
+			}
+		}
+
 		txq_advance(&q->q, ndesc);
 		written += ndesc;
 		if (unlikely(written > 32)) {
@@ -3034,8 +3073,17 @@ static void service_ofldq(struct sge_uld_txq *q)
 		 */
 		spin_lock(&q->sendq.lock);
 		__skb_unlink(skb, &q->sendq);
-		if (is_ofld_imm(skb))
+		if (is_ofld_imm(skb, q->adap))
 			kfree_skb(skb);
+
+		if (q->tx_reclaim_pending) {
+			q->tx_reclaim_pending = 0;
+			if (unlikely(q->full)) {
+				cxgb4_reclaim_completed_tx(q->adap, &q->q, false);
+				if (txq_avail(&q->q) >= TXQ_STOP_THRES)
+					q->full = 0;
+			}
+		}
 	}
 	if (likely(written))
 		cxgb4_ring_tx_db(q->adap, &q->q, written);
@@ -3055,7 +3103,7 @@ static void service_ofldq(struct sge_uld_txq *q)
  */
 static int ofld_xmit(struct sge_uld_txq *q, struct sk_buff *skb)
 {
-	skb->priority = calc_tx_flits_ofld(skb);       /* save for restart */
+	cxgb4_uld_skb_set_credits(skb, calc_tx_flits_ofld(skb, q->adap)); /* save for restart */
 	spin_lock(&q->sendq.lock);
 
 	/* Queue the new skb onto the Offload Queue's Pending Send Queue.  If
@@ -3207,12 +3255,13 @@ static void *inline_tx_header(const void *src,
 static int ofld_xmit_direct(struct sge_uld_txq *q, const void *src,
 			    unsigned int len)
 {
+	bool sendpath_enable = q->adap->params.tx_sendpath;
 	unsigned int ndesc;
 	int credits;
 	u64 *pos;
 
 	/* Use the lower limit as the cut-off */
-	if (len > MAX_IMM_OFLD_TX_DATA_WR_LEN) {
+	if (len > ofld_tx_data_wr_max_len(sendpath_enable)) {
 		WARN_ON(1);
 		return NET_XMIT_DROP;
 	}
@@ -3369,7 +3418,7 @@ EXPORT_SYMBOL(cxgb4_pktgl_to_skb);
  *	Releases the pages of a packet gather list.  We do not own the last
  *	page on the list and do not free it.
  */
-static void t4_pktgl_free(const struct pkt_gl *gl)
+void t4_pktgl_free(const struct pkt_gl *gl)
 {
 	int n;
 	const struct page_frag *p;
@@ -3377,6 +3426,7 @@ static void t4_pktgl_free(const struct pkt_gl *gl)
 	for (p = gl->frags, n = gl->nfrags - 1; n--; p++)
 		put_page(p->page);
 }
+EXPORT_SYMBOL(t4_pktgl_free);
 
 /*
  * Process an MPS trace packet.  Give it an unused protocol number so it won't
