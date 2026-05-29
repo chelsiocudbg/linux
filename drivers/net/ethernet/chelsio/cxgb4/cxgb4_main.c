@@ -128,8 +128,9 @@ MODULE_FIRMWARE(FW7_FNAME);
  * msi = 1: only consider MSI and INTx interrupts
  * msi = 0: force INTx interrupts
  */
-static unsigned int msi = 2;
-module_param(msi, uint, 0644);
+static int msi = 2;
+
+module_param(msi, int, 0644);
 MODULE_PARM_DESC(msi, "whether to use INTx (0), MSI (1) or MSI-X (2)");
 
 /*
