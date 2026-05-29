@@ -17,7 +17,6 @@
 #include <net/addrconf.h>
 #include "cxgb4.h"
 #include "clip_tbl.h"
-#include "cxgb4_debugfs.h"
 
 static inline unsigned int ipv4_clip_hash(struct clip_tbl *c, const u32 *key)
 {
@@ -250,9 +249,8 @@ EXPORT_SYMBOL(cxgb4_update_root_dev_clip);
 
 int clip_tbl_show(struct seq_file *seq, void *v)
 {
-	struct t4_linux_debugfs_data *d = seq->private;
-	struct adapter *adap = d->adap;
-	struct clip_tbl *ctbl = adap->clipt;
+	struct adapter *adapter = seq->private;
+	struct clip_tbl *ctbl = adapter->clipt;
 	struct clip_entry *ce;
 	char ip[60];
 	int i;
