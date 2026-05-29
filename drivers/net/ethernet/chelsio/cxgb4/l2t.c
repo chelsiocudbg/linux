@@ -47,7 +47,6 @@
 #include "t4fw_api.h"
 #include "t4_regs.h"
 #include "t4_values.h"
-#include "cxgb4_debugfs.h"
 
 /* identifies sync vs async L2T_WRITE_REQs */
 #define SYNC_WR_S    12
@@ -234,7 +233,7 @@ again:
 		spin_unlock_bh(&e->lock);
 		fallthrough;
 	case L2T_STATE_VALID:     /* fast-path, send the packet on */
-                return t4_ofld_send(adap, skb);
+		return t4_ofld_send(adap, skb);
 	case L2T_STATE_RESOLVING:
 	case L2T_STATE_SYNC_WRITE:
 		spin_lock_bh(&e->lock);
@@ -425,9 +424,10 @@ struct l2t_entry *cxgb4_l2t_get(struct l2t_data *d, struct neighbour *neigh,
 	int ifidx = neigh->dev->ifindex;
 	int hash = addr_hash(d, addr, addr_len, ifidx);
 
-	lport = cxgb4_port_chan(physdev);
 	if (neigh->dev->flags & IFF_LOOPBACK)
-		lport += 4;
+		lport = netdev2pinfo(physdev)->tx_chan + 4;
+	else
+		lport = netdev2pinfo(physdev)->lport;
 
 	if (is_vlan_dev(neigh->dev)) {
 		vlan = vlan_dev_vlan_id(neigh->dev);
@@ -472,39 +472,35 @@ done:
 EXPORT_SYMBOL(cxgb4_l2t_get);
 
 u64 cxgb4_select_ntuple(struct net_device *dev,
-                        const struct l2t_entry *l2t, u16 ipsecidx)
+			const struct l2t_entry *l2t)
 {
-        struct adapter *adap = netdev2adap(dev);
-        struct tp_params *tp = &adap->params.tp;
-        u64 ntuple = 0;
+	struct adapter *adap = netdev2adap(dev);
+	struct tp_params *tp = &adap->params.tp;
+	u64 ntuple = 0;
 
-        /* Initialize each of the fields which we care about which are present
-         * in the Compressed Filter Tuple.
-         */
-        if (tp->vlan_shift >= 0 && l2t->vlan != VLAN_NONE)
-                ntuple |= (u64)(FT_VLAN_VLD_F | l2t->vlan) << tp->vlan_shift;
+	/* Initialize each of the fields which we care about which are present
+	 * in the Compressed Filter Tuple.
+	 */
+	if (tp->vlan_shift >= 0 && l2t->vlan != VLAN_NONE)
+		ntuple |= (u64)(FT_VLAN_VLD_F | l2t->vlan) << tp->vlan_shift;
 
-        if (tp->port_shift >= 0)
-                ntuple |= (u64)l2t->lport << tp->port_shift;
+	if (tp->port_shift >= 0)
+		ntuple |= (u64)l2t->lport << tp->port_shift;
 
-        if (tp->protocol_shift >= 0)
-                ntuple |= (u64)IPPROTO_TCP << tp->protocol_shift;
+	if (tp->protocol_shift >= 0)
+		ntuple |= (u64)IPPROTO_TCP << tp->protocol_shift;
 
-        if (tp->vnic_shift >= 0 && (tp->ingress_config & VNIC_F)) {
-                struct port_info *pi = (struct port_info *)netdev_priv(dev);
+	if (tp->vnic_shift >= 0 && (tp->ingress_config & VNIC_F)) {
+		struct port_info *pi = (struct port_info *)netdev_priv(dev);
 
-                ntuple |= (u64)(FT_VNID_ID_VF_V(pi->vin) |
-                                FT_VNID_ID_PF_V(adap->pf) |
-                                FT_VNID_ID_VLD_V(pi->vivld)) << tp->vnic_shift;
-        }
+		ntuple |= (u64)(FT_VNID_ID_VF_V(pi->vin) |
+				FT_VNID_ID_PF_V(adap->pf) |
+				FT_VNID_ID_VLD_V(pi->vivld)) << tp->vnic_shift;
+	}
 
-        if (tp->ipsecidx_shift >= 0)
-                ntuple |= (u64)ipsecidx << tp->ipsecidx_shift;
-
-        return ntuple;
+	return ntuple;
 }
 EXPORT_SYMBOL(cxgb4_select_ntuple);
-
 
 /*
  * Called when the host's neighbor layer makes a change to some entry that is
@@ -730,9 +726,8 @@ static int l2t_seq_open(struct inode *inode, struct file *file)
 	int rc = seq_open(file, &l2t_seq_ops);
 
 	if (!rc) {
-		struct t4_linux_debugfs_data *d = inode->i_private;
+		struct adapter *adap = inode->i_private;
 		struct seq_file *seq = file->private_data;
-		struct adapter *adap = d->adap;
 
 		seq->private = adap->l2t;
 	}
