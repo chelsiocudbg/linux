@@ -1467,10 +1467,8 @@ void cxgb4_register_uld(enum cxgb4_uld_type type,
 	}
 	cxgb4_ulds[type] = *p;
 	list_for_each_entry(adap, &adapter_list, list_node) {
-		mutex_lock(&adap->uld_inst.uld_mutex);
 		cxgb4_uld_alloc_resources(adap, type, p);
 		uld_attach(adap, type);
-		mutex_unlock(&adap->uld_inst.uld_mutex);
 	}
 	mutex_unlock(&uld_mutex);
 
