@@ -89,7 +89,6 @@
 #include "cxgb4_tc_matchall.h"
 #include "cxgb4_ptp.h"
 #include "cxgb4_cudbg.h"
-#include "cxgb4_common.h"
 
 char cxgb4_driver_name[] = KBUILD_MODNAME;
 
@@ -2019,11 +2018,6 @@ err:
 }
 EXPORT_SYMBOL(cxgb4_read_tpte);
 
-struct resource *cxgb4_bar_resource(struct net_device *dev, u8 index)
-{
-	return cxgb4_pci_resource_get(netdev2adap(dev), index);
-}
-
 static void notify_rdma_uld(struct adapter *adap, enum cxgb4_control cmd)
 {
 	enum cxgb4_uld_type type = CXGB4_ULD_RDMA;
@@ -2531,15 +2525,11 @@ rel_lock:
 
 static void cxgb_down(struct adapter *adapter)
 {
-	u8 i;
+	cxgb4_work_cancel(adapter->workq, &adapter->tid_release_task);
 	cxgb4_work_cancel(adapter->workq, &adapter->db_full_task);
 	cxgb4_work_cancel(adapter->workq, &adapter->db_drop_task);
-
-	for (i = 0; i < CXGB4_ULD_TYPE_MAX; i++) {
-		mutex_lock(&adapter->uld_inst.uld_mutex);
-		if (adapter->uld[i].handle)
-		mutex_unlock(&adapter->uld_inst.uld_mutex);
-	}
+	adapter->tid_release_task_busy = false;
+	adapter->tid_release_head = NULL;
 
 	t4_sge_stop(adapter);
 	t4_free_sge_resources(adapter);
@@ -5335,151 +5325,7 @@ bool cxgb4_msi_enabled(struct adapter *adap)
 	return cxgb4_pci_msi_enabled(adap);
 }
 
-/* Return an error number if the indicated filter isn't writable ...
- */
-int writable_filter(struct filter_entry *f)
-{
-	if (f->locked)
-		return -EPERM;
-	if (f->pending)
-		return -EBUSY;
-
-	return 0;
-}
-
 #ifdef CONFIG_CHELSIO_T4_OFFLOAD
-
-int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
-		__be32 sip, __be16 sport, __be16 vlan,
-		unsigned int queue, unsigned char port, unsigned char mask)
-{
-	int ret;
-	struct filter_entry *f;
-	struct adapter *adap;
-	int i;
-	u8 *val;
-
-	adap = netdev2adap(dev);
-
-	/* Adjust stid to correct filter index */
-	stid -= adap->tids.sftid_base;
-	stid += adap->tids.nftids;
-
-	/* Check to make sure the filter requested is writable ...
-	 */
-	f = &adap->tids.ftid_tab[stid];
-	ret = writable_filter(f);
-	if (ret)
-		return ret;
-
-	/* Clear out any old resources being used by the filter before
-	 * we start constructing the new filter.
-	 */
-	if (f->valid)
-		clear_filter(adap, f);
-
-	/* Clear out filter specifications */
-	memset(&f->fs, 0, sizeof(struct ch_filter_specification));
-	f->fs.val.lport = cpu_to_be16(sport);
-	f->fs.mask.lport  = ~0;
-	val = (u8 *)&sip;
-	if ((val[0] | val[1] | val[2] | val[3]) != 0) {
-		for (i = 0; i < 4; i++) {
-			f->fs.val.lip[i] = val[i];
-			f->fs.mask.lip[i] = ~0;
-		}
-		if (adap->params.tp.vlan_pri_map & F_PORT) {
-			f->fs.val.iport = port;
-			f->fs.mask.iport = mask;
-		}
-	}
-
-	if (adap->params.tp.vlan_pri_map & F_PROTOCOL) {
-		f->fs.val.proto = IPPROTO_TCP;
-		f->fs.mask.proto = ~0;
-	}
-
-	/*
-	 * This code demonstrates how one would selectively Offload
-	 * (TOE) certain incoming connections by using the extended
-	 * "Filter Information" capabilities of Server Control Blocks
-	 * (SCB).  (See "Classification and Filtering" in the T4 Data
-	 * Book for a description of Ingress Packet pattern matching
-	 * capabilities.  See also documentation on the
-	 * TP_VLAN_PRI_MAP register.)  Because this selective
-	 * Offloading is happening in the chip, this allows
-	 * non-Offloading and Offloading drivers to coexist.  For
-	 * example, an Offloading Driver might be running in a
-	 * Hypervisor while non-Offloading vNIC Drivers might be
-	 * running in Virtual Machines.
-	 *
-	 * This particular example code demonstrates how one would
-	 * selectively Offload incoming connections based on VLANs.
-	 * We allow one VLAN to be designated as the "Offloading
-	 * VLAN".  Ingress SYNs on this Offload VLAN will match the
-	 * filter which we put into the Listen SCB and will result in
-	 * Offloaded Connections on that VLAN.  Incoming SYNs on other
-	 * VLANs will not match and will go through normal NIC
-	 * processing.
-	 *
-	 * This is not production code since one would want a lot more
-	 * infrastructure to allow a variety of filter specifications
-	 * on a per-server basis.  But this demonstrates the
-	 * fundamental mechanisms one would use to build such an
-	 * infrastructure.
-	 *
-	 */
-	if (vlan && (adap->params.tp.vlan_pri_map & F_VLAN)) {
-		f->fs.val.ivlan_vld = 1;
-		f->fs.val.ivlan = be16_to_cpu(vlan);
-		f->fs.mask.ivlan_vld = ~0;
-		f->fs.mask.ivlan = ~0;
-	}
-
-	f->fs.dirsteer = 1;
-	f->fs.iq = queue;
-	/* Mark filter as locked */
-	f->locked = 1;
-	f->fs.rpttid = 1;
-
-	/* Save the actual tid. We need this to get the corresponding
-	 * filter entry structure in filter_rpl.
-	 */
-	f->tid = stid + adap->tids.ftid_base;
-	ret = set_filter_wr(adap, stid, GFP_KERNEL);
-	if (ret) {
-		clear_filter(adap, f);
-		return ret;
-	}
-
-	return 0;
-}
-EXPORT_SYMBOL(cxgb4_create_server_filter);
-
-int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
-		unsigned int queue, bool ipv6)
-{
-	int ret;
-	struct filter_entry *f;
-	struct adapter *adap;
-
-	adap = netdev2adap(dev);
-
-	/* Adjust stid to correct filter index */
-	stid -= adap->tids.sftid_base;
-	stid += adap->tids.nftids;
-
-	f = &adap->tids.ftid_tab[stid];
-	/* Unlock the filter */
-	f->locked = 0;
-
-	ret = delete_filter(adap, stid, GFP_KERNEL);
-	if (ret)
-		return ret;
-
-	return 0;
-}
-EXPORT_SYMBOL(cxgb4_remove_server_filter);
 
 int cxgb4_filter_field_shift(const struct net_device *dev, int filter_sel)
 {

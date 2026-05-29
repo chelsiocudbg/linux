@@ -355,14 +355,6 @@ static void cxgb4_filter_clear(struct adapter *adap, struct filter_entry *f)
 	memset(f, 0, sizeof(*f));
 }
 
-static void cxgb4_atid_filter_clear(struct adapter *adap,
-                                    struct filter_entry *f)
-{
-	cxgb4_free_atid(&adap->tids, f->tid);
-        cxgb4_filter_clear(adap, f);
-	kfree(f);
-}
-
 static void cxgb4_hashtid_filter_clear(struct adapter *adap,
                                        struct filter_entry *f)
 {
@@ -1625,7 +1617,7 @@ void cxgb4_filter_hash_create_rpl(struct adapter *adap,
                                   "%s: filter creation PROBLEM; status = %u\n",
                                   __func__, status);
 
-                cxgb4_atid_filter_clear(adap, f);
+                cxgb4_free_atid(t, ftid);
                 if (ctx) {
                         if (status == CPL_ERR_TCAM_FULL)
                                 ctx->result = -EAGAIN;
@@ -2451,6 +2443,7 @@ int cxgb4_hash_filter_init(struct adapter *adap)
         adap->params.hash_filter = 1;
         return 0;
 }
+#endif
 
 int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
 			       __be32 sip, __be16 sport, __be16 vlan,
@@ -2578,120 +2571,8 @@ int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
 	return 0;
 }
 EXPORT_SYMBOL(cxgb4_remove_server_filter);
-#endif
-
-
-//----------------- BEGIN old filter changes -----------------------------
-
-int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
-               __be32 sip, __be16 sport, __be16 vlan,
-               unsigned int queue, unsigned char port, unsigned char mask)
-{
-       int ret;
-       struct filter_entry *f;
-       struct adapter *adap;
-       int i;
-       u8 *val;
-
-       adap = netdev2adap(dev);
-
-       /* Adjust stid to correct filter index */
-       stid -= adap->tids.sftid_base;
-       stid += adap->tids.nftids;
-
-       /* Check to make sure the filter requested is writable ...
-        */
-       f = &adap->tids.ftid_tab[stid];
-       ret = writable_filter(f);
-       if (ret)
-               return ret;
-
-       /* Clear out any old resources being used by the filter before
-        * we start constructing the new filter.
-        */
-       if (f->valid)
-               clear_filter(adap, f);
-
-       /* Clear out filter specifications */
-       memset(&f->fs, 0, sizeof(struct ch_filter_specification));
-       f->fs.val.lport = be16_to_cpu(sport);
-       f->fs.mask.lport  = ~0;
-       val = (u8 *)&sip;
-       if ((val[0] | val[1] | val[2] | val[3]) != 0) {
-               for (i = 0; i < 4; i++) {
-                       f->fs.val.lip[i] = val[i];
-                       f->fs.mask.lip[i] = ~0;
-               }
-               if (adap->params.tp.vlan_pri_map & PORT_F) {
-                       f->fs.val.iport = port;
-                       f->fs.mask.iport = mask;
-               }
-       }
-
-       if (adap->params.tp.vlan_pri_map & PROTOCOL_F) {
-               f->fs.val.proto = IPPROTO_TCP;
-               f->fs.mask.proto = ~0;
-       }
-
-       f->fs.dirsteer = 1;
-       f->fs.iq = queue;
-       /* Mark filter as locked */
-       f->locked = 1;
-       f->fs.rpttid = 1;
-
-       /* Save the actual tid. We need this to get the corresponding
-        * filter entry structure in filter_rpl.
-        */
-       f->tid = stid + adap->tids.ftid_base;
-       ret = set_filter_wr(adap, stid);
-       if (ret) {
-               clear_filter(adap, f);
-               return ret;
-       }
-
-       return 0;
-}
-EXPORT_SYMBOL(cxgb4_create_server_filter);
-
-int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
-               unsigned int queue, bool ipv6)
-{
-       struct filter_entry *f;
-       struct adapter *adap;
-
-       adap = netdev2adap(dev);
-
-       /* Adjust stid to correct filter index */
-       stid -= adap->tids.sftid_base;
-       stid += adap->tids.nftids;
-
-       f = &adap->tids.ftid_tab[stid];
-       /* Unlock the filter */
-       f->locked = 0;
-
-       return delete_filter(adap, stid);
-}
-EXPORT_SYMBOL(cxgb4_remove_server_filter);
-
-int cxgb4_hash_filter_init(struct adapter *adap)
-{
-	unsigned int hash_size = adap->tids.nhash;
-
-        if (!hash_size)
-                return 0;
-
-        adap->params.hash_filter = 1;
-        return 0;
-}
 
 //----------------- END old filter changes -----------------------------
-
-
-
-
-
-
-
 
 /* Filter Table Debugfs.
  */
@@ -3372,7 +3253,6 @@ const struct file_operations hash_filters_debugfs_fops = {
 };
 
 //---------------------------------- old changes doubtful ------------------------------------------
-#if 0
 static bool is_addr_all_mask(u8 *ipmask, int family)
 {
 	if (family == AF_INET) {
@@ -3500,4 +3380,3 @@ bool is_filter_exact_match(struct adapter *adap,
 
 	return true;
 }
-#endif

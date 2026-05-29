@@ -21,13 +21,6 @@ static void cxgb4_pci_set_primary_pf(struct adapter *adap)
        adap->primary_pf = CXGB4_UNIFIED_PF;
 }
 
-struct device *cxgb4_pci_get_device(struct adapter *adap)
-{
-       struct pci_dev *pdev = adap->pdev;
-
-       return &pdev->dev;
-}
-
 int cxgb4_pci_resource_init(struct adapter *adap)
 {
        struct pci_dev *pdev = adap->pdev;
@@ -78,16 +71,6 @@ void cxgb4_pci_resource_free(struct adapter *adap)
        if ((adap->flags & CXGB4_DEV_ENABLED))
                pci_disable_device(pdev);
        pci_release_regions(pdev);
-}
-
-struct resource *cxgb4_pci_resource_get(struct adapter *adap, u8 index)
-{
-       return pci_resource_n(adap->pdev, index);
-}
-
-resource_size_t cxgb4_pci_resource_size(struct adapter *adap, u8 index)
-{
-       return pci_resource_len(adap->pdev, index);
 }
 
 int cxgb4_pci_chip_init(struct adapter *adap)
@@ -241,11 +224,6 @@ int cxgb4_pci_fw_init(struct adapter *adap, enum dev_state *state)
        return ret;
 }
 
-int cxgb4_pci_vendor_id(struct adapter *adap)
-{
-       return adap->pdev->vendor;
-}
-
 int cxgb4_pci_device_id(struct adapter *adap)
 {
        return adap->pdev->device;
@@ -272,21 +250,6 @@ bool cxgb4_pci_msi_enabled(struct adapter *adap)
        return adap->pdev->msi_enabled;
 }
 
-int cxgb4_pci_irq_vector(struct adapter *adap, int index)
-{
-       return pci_irq_vector(adap->pdev, index);
-}
-
-int cxgb4_pci_alloc_irqs(struct adapter *adap, u32 need, u32 want, u32 flags)
-{
-       return pci_alloc_irq_vectors(adap->pdev, need, want, flags);
-}
-
-void cxgb4_pci_free_irqs(struct adapter *adap)
-{
-       pci_free_irq_vectors(adap->pdev);
-}
-
 int cxgb4_pci_read_config_byte(struct adapter *adap, int where, u8 *val)
 {
        return pci_read_config_byte(adap->pdev, where, val);
@@ -307,21 +270,6 @@ int cxgb4_pci_write_config_word(struct adapter *adap, int where, u16 val)
        return pci_write_config_word(adap->pdev, where, val);
 }
 
-int cxgb4_pci_read_config_dword(struct adapter *adap, int where, u32 *val)
-{
-       return pci_read_config_dword(adap->pdev, where, val);
-}
-
-int cxgb4_pci_write_config_dword(struct adapter *adap, int where, u32 val)
-{
-       return pci_write_config_dword(adap->pdev, where, val);
-}
-
-u8 cxgb4_pci_find_capability(struct adapter *adap, int cap)
-{
-       return pci_find_capability(adap->pdev, cap);
-}
-
 ssize_t cxgb4_pci_read_vpd(struct adapter *adap, loff_t pos, size_t count,
                           void *buf)
 {
@@ -334,36 +282,18 @@ ssize_t cxgb4_pci_write_vpd(struct adapter *adap, loff_t pos, size_t count,
        return pci_write_vpd(adap->pdev, pos, count, buf);
 }
 
-int cxgb4_pci_memory_rw(struct adapter *adap, int win, u64 addr, u64 len,
-                       void *buf, int dir)
-{
-	int ret = 0;
-	unsigned long mtype = 0;//, maddr = 0;
-	u32 params[7], val[7];
-	params[0] = (FW_PARAMS_MNEM_V(FW_PARAMS_MNEM_DEV) |
-			FW_PARAMS_PARAM_X_V(FW_PARAMS_PARAM_DEV_CF));
-	ret = t4_query_params(adap, adap->mbox,
-			adap->pf, 0, 1, params, val);
-	if (ret != 0)
-		return -EINVAL;
-
-	mtype = FW_PARAMS_PARAM_Y_G(val[0]);
-//	maddr = FW_PARAMS_PARAM_Z_G(val[0]) << 16;
-	return t4_memory_rw(adap, win, mtype, addr, len, buf, dir);
-}
-
 #if !defined(CHELSIO_T4_DIAGS) && defined(CONFIG_PCI_IOV)
 int cxgb4_pci_iov_configure(struct adapter *adap, int num_vfs)
 {
-       return cxgb4_iov_configure(adap->pdev, num_vfs);
+	return cxgb4_iov_configure(adap->pdev, num_vfs);
 }
 
 static int cxgb4_pci_sriov_configure(struct pci_dev *pdev, int num_vfs)
 {
-       if (pci_is_bridge(pdev))
-               return -EOPNOTSUPP;
+	if (pci_is_bridge(pdev))
+		return -EOPNOTSUPP;
 
-       return cxgb4_pci_iov_configure(pci_get_drvdata(pdev), num_vfs);
+	return cxgb4_pci_iov_configure(pci_get_drvdata(pdev), num_vfs);
 }
 #endif
 

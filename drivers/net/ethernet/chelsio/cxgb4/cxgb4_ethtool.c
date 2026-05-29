@@ -1211,7 +1211,7 @@ static int eeprom_rd_phys(struct adapter *adap, unsigned int phys_addr, u32 *v)
 	int vaddr = t4_eeprom_ptov(phys_addr, adap->pf, EEPROMPFSIZE);
 
 	if (vaddr >= 0)
-		vaddr = cxgb4_common_read_vpd(adap, vaddr, sizeof(u32), v);
+		vaddr = cxgb4_pci_read_vpd(adap, vaddr, sizeof(u32), v);
 	return vaddr < 0 ? vaddr : 0;
 }
 
@@ -1220,7 +1220,7 @@ static int eeprom_wr_phys(struct adapter *adap, unsigned int phys_addr, u32 v)
 	int vaddr = t4_eeprom_ptov(phys_addr, adap->pf, EEPROMPFSIZE);
 
 	if (vaddr >= 0)
-		vaddr = cxgb4_common_write_vpd(adap, vaddr, sizeof(u32), &v);
+		vaddr = cxgb4_pci_write_vpd(adap, vaddr, sizeof(u32), &v);
 	return vaddr < 0 ? vaddr : 0;
 }
 

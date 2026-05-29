@@ -4905,6 +4905,18 @@ int t4_sge_alloc_ethofld_txq(struct adapter *adap, struct sge_eohw_txq *txq,
         return 0;
 }
 
+void free_txq(struct adapter *adap, struct sge_txq *q)
+{
+        struct sge *s = &adap->sge;
+
+        dma_free_coherent(adap->pdev_dev,
+                          q->size * sizeof(struct tx_desc) + s->stat_len,
+                          q->desc, q->phys_addr);
+        q->cntxt_id = 0;
+        q->sdesc = NULL;
+        q->desc = NULL;
+}
+
 void free_rspq_fl(struct adapter *adap, struct sge_rspq *rq,
 		  struct sge_fl *fl)
 {

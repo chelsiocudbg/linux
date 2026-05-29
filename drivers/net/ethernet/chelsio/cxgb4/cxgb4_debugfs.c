@@ -3194,6 +3194,47 @@ static void cxgb4_sge_qinfo_uld_tx(struct seq_file *seq, int r,
 #undef S3X
 }
 
+struct cxgb4_uld_queue_map *cxgb4_uld_queues_txq_map_get(struct net_device *dev,
+		enum cxgb4_uld_txq_type qtype,
+		enum cxgb4_uld_type uld)
+{
+	struct port_info *pi = netdev2pinfo(dev);
+	struct adapter *adap = netdev2adap(dev);
+	struct cxgb4_uld_queue_info *qinfo;
+
+	qinfo = &adap->uld_inst.qinfo[pi->port_id];
+
+	if (qtype == CXGB4_ULD_TXQ_TYPE_SHARED) {
+		if (uld == CXGB4_ULD_CRYPTO)
+			return &qinfo->cryptoqs.shared_txqs;
+
+		return &qinfo->toeqs.shared_txqs;
+	}
+
+	switch (uld) {
+		case CXGB4_ULD_RDMA:
+			return &qinfo->rdmaqs.txqs;
+		case CXGB4_ULD_ISCSI:
+			return &qinfo->iscsiqs.txqs;
+		case CXGB4_ULD_ISCSIT:
+			return &qinfo->iscsitqs.txqs;
+		case CXGB4_ULD_TYPE_NVME_TCP_HOST:
+			return &qinfo->nvmehqs.txqs;
+		case CXGB4_ULD_TYPE_NVME_TCP_TARGET:
+			return &qinfo->nvmetqs.txqs;
+		case CXGB4_ULD_TYPE_CSTOR:
+			return &qinfo->cstorqs.txqs;
+		case CXGB4_ULD_CRYPTO:
+			return &qinfo->cryptoqs.txqs;
+		case CXGB4_ULD_TYPE_CHTCP:
+			return &qinfo->chtcpqs.txqs;
+		default:
+			break;
+	}
+
+	return &qinfo->toeqs.txqs;
+}
+
 static int cxgb4_sge_qinfo_uld_txq_num(struct adapter *adap,
 				       enum cxgb4_uld_txq_type qtype,
 				       enum cxgb4_uld_type uld)

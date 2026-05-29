@@ -234,9 +234,6 @@ struct cpl_set_tcb_rpl;
 struct cpl_act_open_rpl;
 struct cpl_abort_rpl_rss;
 
-void clear_filter(struct adapter *adap, struct filter_entry *f);
-
-int set_filter_wr(struct adapter *adapter, int fidx);
 int delete_filter(struct adapter *adapter, unsigned int fidx);
 
 int writable_filter(struct filter_entry *f);

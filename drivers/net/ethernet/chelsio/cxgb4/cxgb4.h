@@ -73,7 +73,7 @@ enum dev_state {
 #include "cxgb4_tid.h"
 #include "cxgb4_uld.h"
 #include "t4_values.h"
-#include "cxgb4_common.h"
+#include "cxgb4_pci.h"
 
 #define CH_INFO(adap, fmt, ...)  dev_info(adap->pdev_dev, fmt, ## __VA_ARGS__)
 #define CH_ERR(adap, fmt, ...)   dev_err(adap->pdev_dev, fmt, ## __VA_ARGS__)
