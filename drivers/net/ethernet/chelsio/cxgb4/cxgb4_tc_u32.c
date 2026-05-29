@@ -334,7 +334,7 @@ int cxgb4_config_knode(struct net_device *dev, struct tc_cls_u32_offload *cls)
 	fs.type = is_ipv6 ? 1 : 0;
 
 	/* Set the filter */
-	ret = cxgb4_filter_create(dev, filter_id, &fs, NULL, GFP_KERNEL);
+	ret = cxgb4_set_filter(dev, filter_id, &fs);
 	if (ret)
 		goto out;
 
@@ -437,7 +437,7 @@ int cxgb4_delete_knode(struct net_device *dev, struct tc_cls_u32_offload *cls)
 			return -EINVAL;
 	}
 
-	ret = cxgb4_filter_delete(dev, filter_id, NULL, NULL, GFP_KERNEL);
+	ret = cxgb4_del_filter(dev, filter_id, NULL);
 	if (ret)
 		goto out;
 
@@ -455,7 +455,7 @@ int cxgb4_delete_knode(struct net_device *dev, struct tc_cls_u32_offload *cls)
 				if (!test_bit(j, link->tid_map))
 					continue;
 
-				ret = cxgb4_filter_delete(dev, j, NULL, NULL, GFP_KERNEL);
+				ret = __cxgb4_del_filter(dev, j, NULL, NULL);
 				if (ret)
 					goto out;
 

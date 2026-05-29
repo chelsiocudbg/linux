@@ -287,8 +287,8 @@ static int cxgb4_matchall_del_filter(struct net_device *dev, u8 filter_type)
 	int ret;
 
 	tc_port_matchall = &adap->tc_matchall->port_matchall[pi->port_id];
-	ret = cxgb4_filter_delete(dev, tc_port_matchall->ingress.tid[filter_type],
-			       &tc_port_matchall->ingress.fs[filter_type], NULL, GFP_KERNEL);
+	ret = cxgb4_del_filter(dev, tc_port_matchall->ingress.tid[filter_type],
+			       &tc_port_matchall->ingress.fs[filter_type]);
 	if (ret)
 		return ret;
 
@@ -336,7 +336,7 @@ static int cxgb4_matchall_add_filter(struct net_device *dev,
 
 	cxgb4_process_flow_actions(dev, &cls->rule->action, fs);
 
-	ret = cxgb4_filter_create(dev, fidx, fs, NULL, GFP_KERNEL);
+	ret = cxgb4_set_filter(dev, fidx, fs);
 	if (ret)
 		return ret;
 
@@ -486,7 +486,7 @@ int cxgb4_tc_matchall_stats(struct net_device *dev,
 
 	ingress = &tc_port_matchall->ingress;
 	for (i = 0; i < CXGB4_FILTER_TYPE_MAX; i++) {
-		ret = cxgb4_filter_get_counters(dev, ingress->tid[i],
+		ret = cxgb4_get_filter_counters(dev, ingress->tid[i],
 						&tmp_packets, &tmp_bytes,
 						ingress->fs[i].hash);
 		if (ret)
