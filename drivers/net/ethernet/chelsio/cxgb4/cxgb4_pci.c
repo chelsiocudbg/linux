@@ -250,21 +250,6 @@ bool cxgb4_pci_msi_enabled(struct adapter *adap)
        return adap->pdev->msi_enabled;
 }
 
-int cxgb4_pci_read_config_byte(struct adapter *adap, int where, u8 *val)
-{
-       return pci_read_config_byte(adap->pdev, where, val);
-}
-
-int cxgb4_pci_write_config_byte(struct adapter *adap, int where, u8 val)
-{
-       return pci_write_config_byte(adap->pdev, where, val);
-}
-
-int cxgb4_pci_read_config_word(struct adapter *adap, int where, u16 *val)
-{
-       return pci_read_config_word(adap->pdev, where, val);
-}
-
 int cxgb4_pci_write_config_word(struct adapter *adap, int where, u16 val)
 {
        return pci_write_config_word(adap->pdev, where, val);

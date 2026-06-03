@@ -26,8 +26,6 @@ int cxgb4_pci_device_id(struct adapter *adap);
 bool cxgb4_pci_relaxed_ordering_enabled(struct adapter *adap);
 bool cxgb4_pci_msix_enabled(struct adapter *adap);
 bool cxgb4_pci_msi_enabled(struct adapter *adap);
-int cxgb4_pci_read_config_byte(struct adapter *adap, int where, u8 *val);
-int cxgb4_pci_write_config_byte(struct adapter *adap, int where, u8 val);
 int cxgb4_pci_read_config_word(struct adapter *adap, int where, u16 *val);
 int cxgb4_pci_write_config_word(struct adapter *adap, int where, u16 val);
 ssize_t cxgb4_pci_read_vpd(struct adapter *adap, loff_t pos, size_t count,
