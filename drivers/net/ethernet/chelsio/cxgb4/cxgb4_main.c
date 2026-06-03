@@ -671,15 +671,15 @@ static int fwevtq_handler(struct sge_rspq *q, const __be64 *rsp,
 	} else if (opcode == CPL_SET_TCB_RPL) {
 		const struct cpl_set_tcb_rpl *p = (void *)rsp;
 
-		cxgb4_filter_normal_rpl(q->adap, p);
+		filter_rpl(q->adap, p);
 	} else if (opcode == CPL_ACT_OPEN_RPL) {
 		const struct cpl_act_open_rpl *p = (void *)rsp;
 
-		cxgb4_filter_hash_create_rpl(q->adap, p);
+		hash_filter_rpl(q->adap, p);
 	} else if (opcode == CPL_ABORT_RPL_RSS) {
 		const struct cpl_abort_rpl_rss *p = (void *)rsp;
 
-		cxgb4_filter_hash_delete_rpl(q->adap, p);
+		hash_del_filter_rpl(q->adap, p);
 	} else if (opcode == CPL_SRQ_TABLE_RPL) {
 		const struct cpl_srq_table_rpl *p = (void *)rsp;
 
@@ -6957,7 +6957,7 @@ void cxgb4_adap_remove(struct adapter *adapter)
 	/* If we allocated filters, free up state associated with any
 	 * valid filters ...
 	 */
-	cxgb4_filter_clear_all(adapter);
+	clear_all_filters(adapter);
 
 	adapter->flags |= CXGB4_SHUTTING_DOWN;
 
