@@ -1173,7 +1173,7 @@ int cudbg_collect_cim_qcfg(struct cudbg_init *pdbg_init,
 
 static int cudbg_read_cim_ibq(struct cudbg_init *pdbg_init,
 			      struct cudbg_buffer *dbg_buff,
-			      struct cudbg_error *cudbg_err, u8 qid)
+			      struct cudbg_error *cudbg_err, int qid)
 {
 	struct struct_cim_ibq_rev1 *cim_ibq_buff;
 	struct adapter *padap = pdbg_init->adap;
@@ -1366,7 +1366,7 @@ u32 cudbg_cim_obq_size(struct adapter *padap, int qid)
 
 static int cudbg_read_cim_obq(struct cudbg_init *pdbg_init,
 			      struct cudbg_buffer *dbg_buff,
-			      struct cudbg_error *cudbg_err, u8 qid)
+			      struct cudbg_error *cudbg_err, int qid)
 {
 	struct struct_cim_obq_rev1 *cim_obq_buff;
 	struct adapter *padap = pdbg_init->adap;
@@ -1456,14 +1456,14 @@ int cudbg_collect_cim_obq_ncsi(struct cudbg_init *pdbg_init,
 	return cudbg_read_cim_obq(pdbg_init, dbg_buff, cudbg_err, 5);
 }
 
-int cudbg_collect_cim_obq_sge_rx_q0(struct cudbg_init *pdbg_init,
+int cudbg_collect_obq_sge_rx_q0(struct cudbg_init *pdbg_init,
 				struct cudbg_buffer *dbg_buff,
 				struct cudbg_error *cudbg_err)
 {
 	return cudbg_read_cim_obq(pdbg_init, dbg_buff, cudbg_err, 6);
 }
 
-int cudbg_collect_cim_obq_sge_rx_q1(struct cudbg_init *pdbg_init,
+int cudbg_collect_obq_sge_rx_q1(struct cudbg_init *pdbg_init,
 				struct cudbg_buffer *dbg_buff,
 				struct cudbg_error *cudbg_err)
 {
@@ -2417,11 +2417,11 @@ int cudbg_collect_pcie_indirect(struct cudbg_init *pdbg_init,
 		pcie_pio->ireg_local_offset = t5_pcie_cdbg_array[i][2];
 		pcie_pio->ireg_offset_range = t5_pcie_cdbg_array[i][3];
 		t4_read_indirect(padap,
-				pcie_pio->ireg_addr,
-				pcie_pio->ireg_data,
-				buff,
-				pcie_pio->ireg_offset_range,
-				pcie_pio->ireg_local_offset);
+				 pcie_pio->ireg_addr,
+				 pcie_pio->ireg_data,
+				 buff,
+				 pcie_pio->ireg_offset_range,
+				 pcie_pio->ireg_local_offset);
 		ch_pcie++;
 	}
 	return cudbg_write_and_release_buff(pdbg_init, &temp_buff, dbg_buff);
@@ -2540,8 +2540,8 @@ int cudbg_collect_tid(struct cudbg_init *pdbg_init,
 	struct cudbg_buffer temp_buff, region_buff;
 	struct adapter *padap = pdbg_init->adap;
 	struct cudbg_letcam letcam = {{ 0 }};
-	struct tid_info_region_rev1 *tid1;
-	struct tid_info_region *tid;
+	struct cudbg_tid_info_region_rev1 *tid1;
+	struct cudbg_tid_info_region *tid;
 	u32 para[2], val[2], pf;
 	int rc;
 	u8 i;
@@ -2558,11 +2558,11 @@ int cudbg_collect_tid(struct cudbg_init *pdbg_init,
 	 FW_PARAMS_PARAM_Z_V(0))
 #define MAX_ATIDS_A 8192U
 
-	tid1 = (struct tid_info_region_rev1 *)temp_buff.data;
+	tid1 = (struct cudbg_tid_info_region_rev1 *)temp_buff.data;
 	tid = &(tid1->tid);
 	tid1->ver_hdr.signature = CUDBG_ENTITY_SIGNATURE;
 	tid1->ver_hdr.revision = CUDBG_TID_INFO_REV;
-	tid1->ver_hdr.size = sizeof(struct tid_info_region_rev1) -
+	tid1->ver_hdr.size = sizeof(struct cudbg_tid_info_region_rev1) -
 		sizeof(struct cudbg_ver_hdr);
 
 	tid->le_db_conf = t4_read_reg(padap, LE_DB_CONFIG_A);
@@ -3838,18 +3838,18 @@ void cudbg_fill_qdesc_num_and_size(const struct adapter *padap,
 
 	/* ULD TXQ, RXQ, and FLQ */
 	tot_entries += CXGB4_TX_MAX * MAX_OFLD_QSETS;
-	tot_entries += CXGB4_ULD_TYPE_MAX * MAX_ULD_QSETS * 2;
+	tot_entries += CXGB4_ULD_MAX * MAX_ULD_QSETS * 2;
 
 	tot_size += CXGB4_TX_MAX * MAX_OFLD_QSETS * MAX_TXQ_ENTRIES *
 		    MAX_TXQ_DESC_SIZE;
-	tot_size += CXGB4_ULD_TYPE_MAX * MAX_ULD_QSETS * MAX_RSPQ_ENTRIES *
+	tot_size += CXGB4_ULD_MAX * MAX_ULD_QSETS * MAX_RSPQ_ENTRIES *
 		    MAX_RXQ_DESC_SIZE;
-	tot_size += CXGB4_ULD_TYPE_MAX * MAX_ULD_QSETS * MAX_RX_BUFFERS *
+	tot_size += CXGB4_ULD_MAX * MAX_ULD_QSETS * MAX_RX_BUFFERS *
 		    MAX_FL_DESC_SIZE;
 
 	/* ULD CIQ */
-	tot_entries += CXGB4_ULD_TYPE_MAX * MAX_ULD_QSETS;
-	tot_size += CXGB4_ULD_TYPE_MAX * MAX_ULD_QSETS * SGE_MAX_IQ_SIZE *
+	tot_entries += CXGB4_ULD_MAX * MAX_ULD_QSETS;
+	tot_size += CXGB4_ULD_MAX * MAX_ULD_QSETS * SGE_MAX_IQ_SIZE *
 		    MAX_RXQ_DESC_SIZE;
 
 	/* ETHOFLD TXQ, RXQ, and FLQ */
@@ -3976,7 +3976,7 @@ int cudbg_collect_qdesc(struct cudbg_init *pdbg_init,
 		u32 base;
 
 		/* ULD RXQ */
-		for (j = 0; j < CXGB4_ULD_TYPE_MAX; j++) {
+		for (j = 0; j < CXGB4_ULD_MAX; j++) {
 			if (!s->uld_rxq_info[j])
 				continue;
 
@@ -3988,7 +3988,7 @@ int cudbg_collect_qdesc(struct cudbg_init *pdbg_init,
 		}
 
 		/* ULD FLQ */
-		for (j = 0; j < CXGB4_ULD_TYPE_MAX; j++) {
+		for (j = 0; j < CXGB4_ULD_MAX; j++) {
 			if (!s->uld_rxq_info[j])
 				continue;
 
@@ -4000,7 +4000,7 @@ int cudbg_collect_qdesc(struct cudbg_init *pdbg_init,
 		}
 
 		/* ULD CIQ */
-		for (j = 0; j < CXGB4_ULD_TYPE_MAX; j++) {
+		for (j = 0; j < CXGB4_ULD_MAX; j++) {
 			if (!s->uld_rxq_info[j])
 				continue;
 

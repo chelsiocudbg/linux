@@ -105,10 +105,10 @@ int cudbg_collect_cim_pif_la(struct cudbg_init *pdbg_init,
 int cudbg_collect_clk_info(struct cudbg_init *pdbg_init,
 			   struct cudbg_buffer *dbg_buff,
 			   struct cudbg_error *cudbg_err);
-int cudbg_collect_cim_obq_sge_rx_q0(struct cudbg_init *pdbg_init,
+int cudbg_collect_obq_sge_rx_q0(struct cudbg_init *pdbg_init,
 				struct cudbg_buffer *dbg_buff,
 				struct cudbg_error *cudbg_err);
-int cudbg_collect_cim_obq_sge_rx_q1(struct cudbg_init *pdbg_init,
+int cudbg_collect_obq_sge_rx_q1(struct cudbg_init *pdbg_init,
 				struct cudbg_buffer *dbg_buff,
 				struct cudbg_error *cudbg_err);
 int cudbg_collect_pcie_indirect(struct cudbg_init *pdbg_init,
@@ -251,7 +251,7 @@ static inline u32 cudbg_uld_rxq_to_qtype(u32 uld)
 		return CUDBG_QTYPE_ISCSIT_RXQ;
 	case CXGB4_ULD_CRYPTO:
 		return CUDBG_QTYPE_CRYPTO_RXQ;
-	case CXGB4_ULD_TYPE_TLS:
+	case CXGB4_ULD_TLS:
 		return CUDBG_QTYPE_TLS_RXQ;
 	}
 
@@ -269,7 +269,7 @@ static inline u32 cudbg_uld_flq_to_qtype(u32 uld)
 		return CUDBG_QTYPE_ISCSIT_FLQ;
 	case CXGB4_ULD_CRYPTO:
 		return CUDBG_QTYPE_CRYPTO_FLQ;
-	case CXGB4_ULD_TYPE_TLS:
+	case CXGB4_ULD_TLS:
 		return CUDBG_QTYPE_TLS_FLQ;
 	}
 
