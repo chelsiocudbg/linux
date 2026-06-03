@@ -934,6 +934,15 @@ static int setup_rss(struct adapter *adap)
 	return 0;
 }
 
+/*
+ * Return the channel of the ingress queue with the given qid.
+ */
+static unsigned int rxq_to_chan(const struct sge *p, unsigned int qid)
+{
+	qid -= p->ingr_start;
+	return netdev2pinfo(p->ingr_map[qid]->netdev)->tx_chan;
+}
+
 void cxgb4_quiesce_rx(struct sge_rspq *q)
 {
 	if (q->handler)
@@ -2155,18 +2164,6 @@ struct net_device * cxgb4_port_chan_to_netdev(struct adapter *adap,
 }
 
 /**
- * cxgb4_port_tx_chan - get the HW Tx channel of a port
- * @dev: the net device for the port
- *
- * Return the HW Tx channel of the given port
- */
-u8 cxgb4_port_tx_chan(const struct net_device *dev)
-{
-	return netdev2pinfo(dev)->tx_chan;
-}
-EXPORT_SYMBOL(cxgb4_port_tx_chan);
-
-/**
  *      cxgb4_port_e2cchan - get the HW c-channel of a port
  *      @dev: the net device for the port
  *
@@ -2295,11 +2292,11 @@ int cxgb4_read_tpte(struct net_device *dev, u32 stag, __be32 *tpte)
 	struct adapter *adap = netdev2adap(dev);
 	unsigned long mtype = 0;
 	u32 params[7], val[7];
-	u64 addr = adap->uld_inst.vres.stag.start + ((stag >> 8) * 32);
+	u32 offset;
 	int ret;
 
-	if (addr >= (adap->uld_inst.vres.stag.start + adap->uld_inst.vres.stag.size +
-				adap->uld_inst.vres.stor_stag.size))
+	offset = ((stag >> 8) * 32) + adap->vres.stag.start;
+	if (offset >= (adap->vres.stag.start + adap->vres.stag.size))
 		goto err;
 
 	params[0] = (FW_PARAMS_MNEM_V(FW_PARAMS_MNEM_DEV) |
@@ -2311,13 +2308,13 @@ int cxgb4_read_tpte(struct net_device *dev, u32 stag, __be32 *tpte)
 	mtype = FW_PARAMS_PARAM_Y_G(val[0]);
 
 	spin_lock(&adap->win0_lock);
-	ret = t4_memory_rw(adap, MEMWIN_NIC, mtype, addr, 32, tpte, T4_MEMORY_READ);
+	ret = t4_memory_rw(adap, MEMWIN_NIC, mtype, offset, 32, tpte, T4_MEMORY_READ);
 	spin_unlock(&adap->win0_lock);
 	return ret;
 
 err:
-	dev_err(adap->pdev_dev, "stag %#x, addr %#llx out of range\n",
-		stag, addr);
+	dev_err(adap->pdev_dev, "stag %#x, offset %#x out of range\n",
+		stag, offset);
 	return -EINVAL;
 }
 EXPORT_SYMBOL(cxgb4_read_tpte);
@@ -2381,7 +2378,7 @@ static int netevent_cb(struct notifier_block *nb, unsigned long event,
 
 static bool netevent_registered;
 static struct notifier_block cxgb4_netevent_nb = {
-	.notifier_call = cxgb4_netevent_cb
+	.notifier_call = netevent_cb
 };
 
 static void drain_db_fifo(struct adapter *adap, int usecs)
@@ -2635,12 +2632,12 @@ static void detach_ulds(struct adapter *adap)
 
 	for (i = 0; i < CXGB4_ULD_MAX; i++)
 	{
-		mutex_lock(&adap->uld_inst.uld_mutex);
+		mutex_lock(&adap->uld_mutex);
 		if (adap->uld[i].handle) {
 			adap->uld[i].state_change(adap->uld[i].handle,
 						  CXGB4_STATE_DETACH);
 		}
-		mutex_unlock(&adap->uld_inst.uld_mutex);
+		mutex_unlock(&adap->uld_mutex);
 	}
 
 	if (netevent_registered && list_empty(&adapter_list)) {
@@ -2656,10 +2653,10 @@ static void notify_ulds(struct adapter *adap, enum cxgb4_state new_state)
 
 	for (i = 0; i < CXGB4_ULD_MAX; i++)
 	{
-		mutex_lock(&adap->uld_inst.uld_mutex);
+		mutex_lock(&adap->uld_mutex);
 		if (adap->uld && adap->uld[i].handle)
 			adap->uld[i].state_change(adap->uld[i].handle, new_state);
-		mutex_unlock(&adap->uld_inst.uld_mutex);
+		mutex_unlock(&adap->uld_mutex);
 	}
 }
 
@@ -4231,24 +4228,6 @@ static int adap_init0_tweaks(struct adapter *adapter)
 	t4_tp_wr_bits_indirect(adapter, TP_INGRESS_CONFIG_A,
 			       CSUM_HAS_PSEUDO_HDR_F, 0);
 
-	if (CHELSIO_CHIP_VERSION(adapter->params.chip) >= CHELSIO_T6)
-		t4_set_reg_field(adapter, ULP_RX_MISC_FEATURE_ENABLE_A, ISCSI_ALL_CMP_MODE_F, ISCSI_ALL_CMP_MODE_F);
-
-	if (CHELSIO_CHIP_VERSION(adapter->params.chip) >= CHELSIO_T7)
-	{
-		/* Enable CPL_NVMT_DATA and CPL_ISCSI_DATA delivery in IQE. */
-		t4_set_reg_field(adapter, SGE_CONTROL2_A,
-				RXCPLMODE_ISCSI_F | RXCPLMODE_NVMT_F,
-				RXCPLMODE_ISCSI_F | RXCPLMODE_NVMT_F);
-		/*
-		 * Enable CPL_RX_ISCSI_CMP delivery for iSCSI PDU
-		 * without payload and enable non-ddp bit in iSCSI DDP tag.
-		 */
-		t4_set_reg_field(adapter, ULP_RX_CTL1_A,
-				ISCSI_CTL2_F | ISCSI_CTL0_F,
-				ISCSI_CTL2_F | ISCSI_CTL0_F);
-	}
-
 	return 0;
 }
 
@@ -5694,7 +5673,7 @@ static int cfg_queues(struct adapter *adap)
 	s->max_ethqsets = qidx;   /* MSI-X may lower it later */
 	avail_qsets -= qidx;
 
-	if (cxgb4_uld_supported_any(adap)) {
+	if (is_uld(adap)) {
 		/* For offload we use 1 queue/channel if all ports are up to 1G,
 		 * otherwise we divide all available queues amongst the channels
 		 * capped by the number of available cores.
@@ -5885,7 +5864,7 @@ static int enable_msix(struct adapter *adap)
 	u32 eth_need, uld_need = 0, ethofld_need = 0, mirror_need = 0;
 	u32 ethqsets = 0, ofldqsets = 0, eoqsets = 0, mirrorqsets = 0;
 	u8 nchan = adap->params.nports;
-	u32 i, want, need, num_vec, flags = 0;
+	u32 i, want, need, num_vec;
 	struct sge *s = &adap->sge;
 	struct msix_entry *entries;
 	struct port_info *pi;
@@ -6111,10 +6090,10 @@ static void print_adapter_info(struct adapter *adapter)
 
 	/* Software/Hardware configuration */
 	dev_info(adapter->pdev_dev, "Configuration: %sNIC %s, %s capable\n",
-		 cxgb4_uld_supported_any(adapter) ? "R" : "",
+		 is_uld(adapter) ? "R" : "",
 		 cxgb4_msix_enabled(adapter) ? "MSI-X" :
 		 (cxgb4_msi_enabled(adapter) ? "MSI" : ""),
-		 cxgb4_uld_supported_any(adapter) ? "Offload" : "non-Offload");
+		 is_uld(adapter) ? "Offload" : "non-Offload");
 }
 
 static void print_port_info(const struct net_device *dev)
@@ -6737,22 +6716,6 @@ int cxgb4_adap_probe(struct adapter *adapter)
 			refcount_set(&pi->adapter->chcr_ktls.ktls_refcount, 0);
 		}
 #endif /* CONFIG_CHELSIO_TLS_DEVICE */
-#if IS_ENABLED(CONFIG_CHELSIO_IPSEC_INLINE)
-#define CXGB_ESP_FEATURES      (NETIF_F_HW_ESP | \
-                               NETIF_F_HW_ESP_TX_CSUM | \
-			       NETIF_F_GSO_ESP)
-		if (pi->adapter->params.crypto & FW_CAPS_CONFIG_IPSEC_INLINE) {
-			if (chip_ver == CHELSIO_T7) {
-				netdev->hw_enc_features |= CXGB_ESP_FEATURES;
-				netdev->features |= CXGB_ESP_FEATURES;
-				netdev->hw_features |= CXGB_ESP_FEATURES;
-			} else {
-				netdev->hw_enc_features |= NETIF_F_HW_ESP;
-				netdev->features |= NETIF_F_HW_ESP;
-			}
-			netdev->xfrmdev_ops = &cxgb4_xfrmdev_ops;
-		}
-#endif /* CONFIG_CHELSIO_IPSEC_INLINE */
 
 		netdev->priv_flags |= IFF_UNICAST_FLT;
 
@@ -6952,7 +6915,7 @@ fw_attach_fail:
 		cxgb4_setup_debugfs(adapter);
 	}
 
-	if (cxgb4_uld_supported_any(adapter))
+	if (is_uld(adapter))
 		cxgb4_uld_enable(adapter);
 
 	if (!is_t4(adapter->params.chip))
@@ -7006,7 +6969,7 @@ void cxgb4_adap_remove(struct adapter *adapter)
 		 */
 		cxgb4_workqueues_destroy(adapter);
 
-		if (cxgb4_uld_supported_any(adapter)) {
+		if (is_uld(adapter)) {
 			if (!list_empty(&adapter->list_node))
 				detach_ulds(adapter);
 			t4_uld_clean_up(adapter);
@@ -7084,7 +7047,7 @@ void cxgb4_adap_shutdown(struct adapter *adapter)
 		cxgb4_mqprio_stop_offload(adapter);
 		rtnl_unlock();
 
-		if (cxgb4_uld_supported_any(adapter)) {
+		if (is_uld(adapter)) {
 			detach_ulds(adapter);
 			t4_uld_clean_up(adapter);
 		}
