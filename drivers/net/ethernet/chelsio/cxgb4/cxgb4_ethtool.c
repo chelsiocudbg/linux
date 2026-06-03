@@ -1668,9 +1668,6 @@ static int set_rss_table(struct net_device *dev,
 	return -EPERM;
 }
 
-
-#if 0
-// __SS__ commenting for now
 static struct filter_entry *cxgb4_get_filter_entry(struct adapter *adap,
 						   u32 ftid)
 {
@@ -1828,7 +1825,6 @@ static int cxgb4_get_rxfh_fields(struct net_device *dev,
 	}
 	return 0;
 }
-#endif
 
 static u32 get_rx_ring_count(struct net_device *dev)
 {
@@ -1840,8 +1836,6 @@ static u32 get_rx_ring_count(struct net_device *dev)
 static int get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
 		     u32 *rules)
 {
-#if 0
-// __SS__ commenting for now
 	const struct port_info *pi = netdev_priv(dev);
 	struct adapter *adap = netdev2adap(dev);
 	unsigned int count = 0, index = 0;
@@ -1864,7 +1858,6 @@ static int get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
 		}
 		return 0;
 	}
-#endif
 
 	return -EOPNOTSUPP;
 }
@@ -1898,6 +1891,12 @@ static int cxgb4_ntuple_del_filter(struct net_device *dev,
 		return -ENOENT;
 
 	filter_id = filter_info->loc_array[cmd->fs.location];
+	f = cxgb4_get_filter_entry(adapter, filter_id);
+
+	if (f->fs.prio)
+		filter_id -= adapter->tids.hpftid_base;
+	else if (!f->fs.hash)
+		filter_id -= (adapter->tids.ftid_base - adapter->tids.nhpftids);
 
 	ret = cxgb4_flow_rule_destroy(dev, f->fs.tc_prio, &f->fs, filter_id);
 	if (ret)
@@ -1957,6 +1956,11 @@ static int cxgb4_ntuple_set_filter(struct net_device *netdev,
 		goto free;
 
 	filter_info = &adapter->ethtool_filters->port[pi->port_id];
+
+	if (fs.prio)
+		tid += adapter->tids.hpftid_base;
+	else if (!fs.hash)
+		tid += (adapter->tids.ftid_base - adapter->tids.nhpftids);
 
 	filter_info->loc_array[cmd->fs.location] = tid;
 	set_bit(cmd->fs.location, filter_info->bmap);
@@ -2247,6 +2251,7 @@ static const struct ethtool_ops cxgb_ethtool_ops = {
 	.get_rxfh_indir_size = get_rss_table_size,
 	.get_rxfh	   = get_rss_table,
 	.set_rxfh	   = set_rss_table,
+	.get_rxfh_fields   = cxgb4_get_rxfh_fields,
 	.self_test	   = cxgb4_self_test,
 	.flash_device      = set_flash,
 	.get_ts_info       = get_ts_info,
@@ -2284,7 +2289,7 @@ int cxgb4_init_ethtool_filters(struct adapter *adap)
 {
 	struct cxgb4_ethtool_filter_info *eth_filter_info;
 	struct cxgb4_ethtool_filter *eth_filter;
-	//struct tid_info *tids = &adap->tids;
+	struct tid_info *tids = &adap->tids;
 	u32 nentries, i;
 	int ret;
 
@@ -2300,6 +2305,10 @@ int cxgb4_init_ethtool_filters(struct adapter *adap)
 
 	eth_filter->port = eth_filter_info;
 
+	nentries = tids->nhpftids + tids->nftids;
+	if (is_hashfilter(adap))
+		nentries += tids->nhash +
+			    (adap->tids.stid_base - adap->tids.tid_base);
 	eth_filter->nentries = nentries;
 
 	for (i = 0; i < adap->params.nports; i++) {
