@@ -172,52 +172,6 @@ void t4_hw_pci_read_cfg4(struct adapter *adap, int reg, u32 *val)
 	t4_write_reg(adap, PCIE_CFG_SPACE_REQ_A, 0);
 }
 
-void t4_hw_pci_read_cfg(struct adapter *adap, int reg, u32 *valp, int size)
-{
-	u32 val;
-
-	t4_hw_pci_read_cfg4(adap, reg & ~0x3, &val);
-
-	if (size <= 2)
-		val = (val >> (8 * (reg & 3))) & ((1 << (size * 8)) - 1);
-
-	*valp = val;
-}
-
-/*
- * Wirte a 32-bit PCI Configuration Space register via the PCI-E backdoor
- * mechanism.  This guarantees that we write the real value even if we're
- * operating within a Virtual Machine and the Hypervisor is trapping our
- * Configuration Space accesses.
- *
- * N.B. This routine should only be used as a last resort: the firmware uses
- *      the backdoor registers on a regular basis and we can end up
- *      conflicting with it's uses!
- */
-void t4_hw_pci_write_cfg(struct adapter *adap, int reg, const u32 val, int size)
-{
-	u32 req = FUNCTION_V(adap->pf) | REGISTER_V(reg);
-
-	if (CHELSIO_CHIP_VERSION(adap->params.chip) <= CHELSIO_T5)
-		req |= ENABLE_F | WRBE_V((1 << size) - 1);
-	else
-		req |= T6_ENABLE_F | T6_WRBE_V((1 << size) - 1);
-
-	if (is_t4(adap->params.chip))
-		req  |= LOCALCFG_F;
-
-	t4_write_reg(adap, PCIE_CFG_SPACE_REQ_A, req);
-	t4_write_reg(adap, PCIE_CFG_SPACE_DATA_A, val);
-
-	/* Reset ENABLE_F to 0 so reads of PCIE_CFG_SPACE_DATA won't cause a
-	 * Configuration Space read.  (None of the other fields matter when
-	 * ENABLE_F is 0 so a simple register write is easier than a
-	 * read-modify-write via t4_set_reg_field().)
-	 */
-	t4_write_reg(adap, PCIE_CFG_SPACE_REQ_A, 0);
-}
-
-
 /*
  * t4_report_fw_error - report firmware error
  * @adap: the adapter
@@ -3628,7 +3582,6 @@ static const struct t4_flash_loc_entry t7_flash_loc_arr[] = {
        [FLASH_LOC_EXP_ROM] = { 32, 15 },
        [FLASH_LOC_IBFT] = { 47, 1 },
        [FLASH_LOC_BOOTCFG] = { 48, 1 },
-       [FLASH_LOC_DPU_BOOT] = { 49, 13 },
        [FLASH_LOC_ISCSI_CRASH] = { 62, 1 },
        [FLASH_LOC_FCOE_CRASH] = { 63, 1 },
        [FLASH_LOC_VPD_BACKUP] = { 64, 1 },
@@ -3637,7 +3590,6 @@ static const struct t4_flash_loc_entry t7_flash_loc_arr[] = {
        [FLASH_LOC_CFG_BACK] = { 95, 1 },
        [FLASH_LOC_CUDBG] = { 96, 48 },
        [FLASH_LOC_CHIP_DUMP] = { 144, 48 },
-       [FLASH_LOC_DPU_AREA] = { 192, 64 },
        [FLASH_LOC_BOOT_AREA] = { 32, 17 }, /* Spans complete UEFI/PXE Boot Area */
        [FLASH_LOC_MIN_SIZE] = { 0, 32 }, /* Spans minimum required sections */
        [FLASH_LOC_END] = { 0, 256 }, /* Spans the entire Serial Flash*/
@@ -4427,40 +4379,6 @@ static int t4_flash_erase_sectors(struct adapter *adapter, int start, int end)
 	}
 	t4_write_reg(adapter, SF_OP_A, 0);    /* unlock SF */
 	return ret;
-}
-
- /**
- * t4_flash_write_sectors - write data to the serial flash
- * @adap: the adapter
- * @addr: the start address to write
- * @n: length of data to write in bytes
- * @data: the data to write
- * @byte_oriented: whether to store data as bytes or as words
- *
- * Write @data to @addr location in serial flash.
- */
-static int t4_flash_write_sectors(struct adapter *adap, unsigned int addr,
-                                 unsigned int size, const u8 *data,
-                                 bool byte_oriented)
-{
-       unsigned int i, n;
-       int ret;
-
-       for (i = 0; i < size; i += SF_PAGE_SIZE) {
-               if ((size - i) < SF_PAGE_SIZE)
-                       n = size - i;
-               else
-                       n = SF_PAGE_SIZE;
-
-               ret = t4_write_flash(adap, addr, n, data, byte_oriented);
-               if (ret)
-                       return ret;
-
-               addr += SF_PAGE_SIZE;
-               data += SF_PAGE_SIZE;
-       }
-
-       return 0;
 }
 
 /**
@@ -6703,14 +6621,9 @@ void t4_tp_get_cpl_stats(struct adapter *adap, struct tp_cpl_stats *st,
 void t4_tp_get_rdma_stats(struct adapter *adap, struct tp_rdma_stats *st,
 			  bool sleep_ok)
 {
-	int chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
 	t4_tp_mib_read(adap, &st->rqe_dfr_pkt, 2, TP_MIB_RQE_DFR_PKT_A,
 		       sleep_ok);
 
-        if (chip_ver >= CHELSIO_T7)
-                /* read RDMA stats IN and OUT for all ports at once */
-                t4_tp_mib_read(adap, &st->pkts_in[0], 28, TP_MIB_RDMA_IN_PKT_0_A,
-                               sleep_ok);
 }
 
 /**
@@ -10085,6 +9998,17 @@ int t4_handle_fw_rpl(struct adapter *adap, const __be64 *rpl)
 	return 0;
 }
 
+static void get_pci_mode(struct adapter *adapter, struct pci_params *p)
+{
+	u16 val;
+
+	if (pci_is_pcie(adapter->pdev)) {
+		pcie_capability_read_word(adapter->pdev, PCI_EXP_LNKSTA, &val);
+		p->speed = val & PCI_EXP_LNKSTA_CLS;
+		p->width = (val & PCI_EXP_LNKSTA_NLW) >> 4;
+	}
+}
+
 /**
  *	init_link_config - initialize a link's SW state
  *	@lc: pointer to structure holding the link state
@@ -10342,6 +10266,18 @@ int t4_prep_adapter(struct adapter *adapter)
 	int ret, ver;
 	uint16_t device_id;
 
+	get_pci_mode(adapter, &adapter->params.pci);
+	ret = t4_get_flash_params(adapter);
+	if (ret < 0) {
+		dev_err(adapter->pdev_dev, "error %d identifying flash\n", ret);
+		return ret;
+	}
+	/* Retrieve adapter's device ID
+	 */
+	pci_read_config_word(adapter->pdev, PCI_DEVICE_ID,
+			     &adapter->params.pci.device_id);
+	pci_read_config_word(adapter->pdev, PCI_VENDOR_ID,
+			     &adapter->params.pci.vendor_id);
 	ver = CHELSIO_CHIP_VERSION(adapter->params.chip);
 	switch (ver) {
 	case CHELSIO_T4:
@@ -10759,8 +10695,6 @@ int t4_init_tp_params(struct adapter *adap, bool sleep_ok)
                         t4_filter_field_shift(adap, T7_MPSHITTYPE_F);
                 adap->params.tp.frag_shift =
                         t4_filter_field_shift(adap, T7_FRAGMENTATION_F);
-                adap->params.tp.roce_shift =
-                        t4_filter_field_shift(adap, ROCE_F);
                 adap->params.tp.synonly_shift=
                         t4_filter_field_shift(adap, SYNONLY_F);
                 adap->params.tp.tcpflags_shift =
@@ -10863,9 +10797,6 @@ int t4_filter_field_shift(const struct adapter *adap, int filter_sel)
                         case T7_FRAGMENTATION_F:
                                 field_shift += FT_FRAGMENTATION_W;
                                 break;
-                        case ROCE_F:
-                                field_shift += FT_ROCE_W;
-                                break;
                         case SYNONLY_F:
                                 field_shift += FT_SYNONLY_W;
                                 break;
@@ -10915,132 +10846,6 @@ int t4_filter_field_shift(const struct adapter *adap, int filter_sel)
 
 out:
 	return field_shift;
-}
-
-/**
- *      t4_create_filter_info - return Compressed Filter Value/Mask tuple
- *      @adapter: the adapter
- *      @filter_value: Filter Value return value pointer
- *      @filter_mask: Filter Mask return value pointer
- *      @fcoe: FCoE filter selection
- *      @port: physical port filter selection
- *      @vnic: Virtual NIC ID filter selection
- *      @vlan: VLAN ID filter selection
- *      @vlan_pcp: VLAN Priority Code Point
- *      @vlan_dei: VLAN Drop Eligibility Indicator
- *      @tos: Type Of Server filter selection
- *      @protocol: IP Protocol filter selection
- *      @ethertype: Ethernet Type filter selection
- *      @macmatch: MPS MAC Index filter selection
- *      @matchtype: MPS Hit Type filter selection
- *      @frag: IP Fragmentation filter selection
- *
- *      Construct a Compressed Filter Value/Mask tuple based on a set of
- *      "filter selection" values.  For each passed filter selection value
- *      which is greater than or equal to 0, we put that value into the
- *      constructed Filter Value and the appropriate mask into the Filter
- *      Mask.  If a filter selections is specified which is not currently
- *      configured into the hardware, an error will be returned.  Otherwise
- *      the constructed FIlter Value/Mask tuple will be returned via the
- *      specified return value pointers and success will be returned.
- *
- *      All filter selection values and the returned Filter Value/Mask values
- *      are in Host-Endian format.
- */
-int t4_create_filter_info(const struct adapter *adapter,
-                          u64 *filter_value, u64 *filter_mask,
-                          int fcoe, int port, int vnic,
-                          int vlan, int vlan_pcp, int vlan_dei,
-                          int tos, int protocol, int ethertype,
-                          int macmatch, int matchtype, int frag)
-{
-        const struct tp_params *tp = &adapter->params.tp;
-        u64 v, m;
-
-       /*
-        * If any selected filter field isn't enabled, return an error.
-        */
-       #define BAD_FILTER(__field) \
-               ((__field) >= 0 && tp->__field##_shift < 0)
-       if (BAD_FILTER(fcoe)       ||
-           BAD_FILTER(port)       ||
-           BAD_FILTER(vnic)       ||
-           BAD_FILTER(vlan)       ||
-           BAD_FILTER(tos)        ||
-           BAD_FILTER(protocol)   ||
-           BAD_FILTER(ethertype)  ||
-           BAD_FILTER(macmatch)   ||
-           BAD_FILTER(matchtype) ||
-           BAD_FILTER(frag))
-               return -EINVAL;
-       #undef BAD_FILTER
-
-       /*
-        * We have to have VLAN ID selected if we want to also select on
-        * either the Priority Code Point or Drop Eligibility Indicator
-        * fields.
-        */
-       if ((vlan_pcp >= 0 || vlan_dei >= 0) && vlan < 0)
-               return -EINVAL;
-
-       /*
-        * Construct Filter Value and Mask.
-        */
-       v = m = 0;
-       #define SET_FILTER_FIELD(__field, __width) \
-       do { \
-               if ((__field) >= 0) { \
-                       const int shift = tp->__field##_shift; \
-                       \
-                       v |= (__field) << shift; \
-                       m |= ((1ULL << (__width)) - 1) << shift; \
-               } \
-       } while (0)
-       SET_FILTER_FIELD(fcoe,      FT_FCOE_W);
-       SET_FILTER_FIELD(port,      FT_PORT_W);
-       SET_FILTER_FIELD(tos,       FT_TOS_W);
-       SET_FILTER_FIELD(protocol,  FT_PROTOCOL_W);
-       SET_FILTER_FIELD(ethertype, FT_ETHERTYPE_W);
-        #undef SET_FILTER_FIELD
-
-        /*
-         * We handle VNIC ID and VLANs separately because they're slightly
-         * different than the rest of the fields.  Both require that a
-         * corresponding "valid" bit be set in the Filter Value and Mask.
-         * These bits are in the top bit of the field.  Additionally, we can
-         * select the Priority Code Point and Drop Eligibility Indicator
-         * fields for VLANs as an option.  Remember that the format of a VLAN
-         * Tag is:
-         *
-         * bits: 3  1      12
-         *     +---+-+------------+
-         *     |PCP|D|   VLAN ID  |
-         *     +---+-+------------+
-         */
-        if (vnic >= 0) {
-                v |= ((1ULL << (FT_VNIC_ID_W-1)) | vnic) << tp->vnic_shift;
-                m |= ((1ULL << FT_VNIC_ID_W) - 1) << tp->vnic_shift;
-        }
-        if (vlan >= 0) {
-                v |= ((1ULL << (FT_VLAN_W-1)) | vlan)  << tp->vlan_shift;
-                m |= ((1ULL << (FT_VLAN_W-1)) | 0xfff) << tp->vlan_shift;
-
-                if (vlan_dei >= 0) {
-                        v |= vlan_dei << (tp->vlan_shift + 12);
-                        m |= 0x7      << (tp->vlan_shift + 12);
-                }
-                if (vlan_pcp >= 0) {
-                        v |= vlan_pcp << (tp->vlan_shift + 13);
-                        m |= 0x7      << (tp->vlan_shift + 13);
-                }
-        }
-
-        /*
-         * Pass back computed Filter Value and Mask; return success.
-         */
-        *filter_value = v;
-        *filter_mask = m;
-        return 0;
 }
 
 int t4_init_rss_mode(struct adapter *adap, int mbox)
@@ -11599,7 +11404,7 @@ int t4_cim_write(struct adapter *adap, unsigned int addr, unsigned int n,
  *      @adap: the adapter
  *      @coreid: uP coreid
  *      @la_buf: where to store the LA data
- *      @wrptr: the HW write pointer within the capture buffer
+ *      @wrptr: the HW write pointer within the capture buffet4_init_portinfor
  *
  *      Reads the contents of the CIM LA buffer on a specific @coreid
  *      with the most recent entry at the end of the returned data
@@ -12503,65 +12308,4 @@ out:
 		dev_err(adap->pdev_dev, "boot config data %s failed %d\n",
 			(size == 0 ? "clear" : "download"), ret);
 	return ret;
-}
-
-/**
- * t4_load_uboot - download U-Boot to serial flash area.
- * @adap: the adapter
- * @uboot_data: buffer containing U-boot Binary to write.
- * @size: buffer size
- *
- * Write the supplied U-Boot Binary to the card's serial flash.
- */
-int t4_load_uboot(struct adapter *adap, const u8 *uboot_data,
-                  unsigned int size)
-{
-        unsigned int sf_sec_start, sf_sec_end, sf_start, sf_size;
-        int ret;
-
-        ret = t4_flash_location_start(adap, FLASH_LOC_DPU_BOOT);
-        if (ret < 0)
-                return ret;
-
-        sf_start = ret;
-
-        ret = t4_flash_location_size(adap, FLASH_LOC_DPU_BOOT);
-        if (ret < 0)
-                return ret;
-
-        sf_size = ret;
-        if (size > sf_size) {
-		dev_err(adap->pdev_dev,
-                       "U-Boot Binary too large. Size: %u > Max %u bytes\n",
-                       size, sf_size);
-                return -EFBIG;
-        }
-
-        ret = t4_flash_location_start_sec(adap, FLASH_LOC_DPU_BOOT);
-        if (ret < 0)
-                return ret;
-
-        sf_sec_start = ret;
-
-        ret = t4_flash_location_nsecs(adap, FLASH_LOC_DPU_BOOT);
-        if (ret < 0)
-                return ret;
-
-        sf_sec_end = sf_sec_start + ret - 1;
-
-        ret = t4_flash_erase_sectors(adap, sf_sec_start, sf_sec_end);
-        /* If size == 0 then we're simply erasing the FLASH sectors associated
-         * with the U-Boot Binary.
-         */
-        if (ret || size == 0)
-                goto out;
-
-        ret = t4_flash_write_sectors(adap, sf_start, size, uboot_data, 0);
-
- out:
-        if (ret)
-		dev_err(adap->pdev_dev, "U-Boot Binary %s failed %d\n",
-                       (size == 0 ? "clear" : "download"), ret);
-
-        return ret;
 }

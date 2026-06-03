@@ -114,14 +114,6 @@
 
 #define SGE_CONTROL2_A	0x1124
 
-#define RXCPLMODE_ISCSI_S    28
-#define RXCPLMODE_ISCSI_V(x) ((x) << RXCPLMODE_ISCSI_S)
-#define RXCPLMODE_ISCSI_F    RXCPLMODE_ISCSI_V(1U)
-
-#define RXCPLMODE_NVMT_S    27
-#define RXCPLMODE_NVMT_V(x) ((x) << RXCPLMODE_NVMT_S)
-#define RXCPLMODE_NVMT_F    RXCPLMODE_NVMT_V(1U)
-
 #define SGE_CONTROL_A	0x1008
 
 #define RXPKTCPLMODE_S    18
@@ -423,16 +415,6 @@
 #define TSVAL_G(x) (((x) >> TSVAL_S) & TSVAL_M)
 
 #define SGE_DBFIFO_STATUS_A 0x10a4
-
-#define LP_INT_THRESH_S    12
-#define LP_INT_THRESH_M    0xfU
-#define LP_INT_THRESH_V(x) ((x) << LP_INT_THRESH_S)
-#define LP_INT_THRESH_G(x) (((x) >> LP_INT_THRESH_S) & LP_INT_THRESH_M)
-
-#define LP_INT_THRESH_T5_S    18
-#define LP_INT_THRESH_T5_M    0xfffU
-#define LP_INT_THRESH_T5_V(x) ((x) << LP_INT_THRESH_T5_S)
-#define LP_INT_THRESH_T5_G(x) (((x) >> LP_INT_THRESH_T5_S) & LP_INT_THRESH_T5_M)
 
 #define SGE_DBVFIFO_SIZE_A 0x113c
 
@@ -790,16 +772,6 @@
 #define PCIE_NONFAT_ERR_A	0x3010
 #define PCIE_CFG_SPACE_REQ_A	0x3060
 
-#define WRBE_S    24
-#define WRBE_M    0xfU
-#define WRBE_V(x) ((x) << WRBE_S)
-#define WRBE_G(x) (((x) >> WRBE_S) & WRBE_M)
-
-#define T6_WRBE_S    25
-#define T6_WRBE_M    0xfU
-#define T6_WRBE_V(x) ((x) << T6_WRBE_S)
-#define T6_WRBE_G(x) (((x) >> T6_WRBE_S) & T6_WRBE_M)
-
 #define PCIE_CFG_SPACE_DATA_A	0x3064
 #define PCIE_MEM_ACCESS_BASE_WIN_A 0x3068
 
@@ -842,43 +814,6 @@
 
 #define PCIE_FW_A 0x30b8
 #define PCIE_FW_PF_A 0x30bc
-
-#define PCIE_DBG_INDIR_REQ_A 0x30ec
-
-#define DBGENABLE_S    31
-#define DBGENABLE_V(x) ((x) << DBGENABLE_S)
-#define DBGENABLE_F    DBGENABLE_V(1U)
-
-#define DBGAUTOINC_S    30
-#define DBGAUTOINC_V(x) ((x) << DBGAUTOINC_S)
-#define DBGAUTOINC_F    DBGAUTOINC_V(1U)
-
-#define POINTER_S    8
-#define POINTER_M    0xffffU
-#define POINTER_V(x) ((x) << POINTER_S)
-#define POINTER_G(x) (((x) >> POINTER_S) & POINTER_M)
-
-#define SELECT_S    0
-#define SELECT_M    0xfU
-#define SELECT_V(x) ((x) << SELECT_S)
-#define SELECT_G(x) (((x) >> SELECT_S) & SELECT_M)
-
-#define PCIE_DBG_INDIR_DATA_0_A 0x30f0
-#define PCIE_DBG_INDIR_DATA_1_A 0x30f4
-#define PCIE_DBG_INDIR_DATA_2_A 0x30f8
-#define PCIE_DBG_INDIR_DATA_3_A 0x30fc
-
-#define PCIE_PF_INT_CFG_A 0x3140
-
-#define T7_VECBASE_S    0
-#define T7_VECBASE_M    0xfffU
-#define T7_VECBASE_V(x) ((x) << T7_VECBASE_S)
-#define T7_VECBASE_G(x) (((x) >> T7_VECBASE_S) & T7_VECBASE_M)
-
-#define T7_PF_INT_VECNUM_S    12
-#define T7_PF_INT_VECNUM_M  0x7ffU
-#define T7_PF_INT_VECNUM_V(x) ((x) << T7_PF_INT_VECNUM_S)
-#define T7_PF_INT_VECNUM_G(x) (((x) >> T7_PF_INT_VECNUM_S) & T7_PF_INT_VECNUM_M)
 
 #define PCIE_CORE_UTL_SYSTEM_BUS_AGENT_STATUS_A 0x5908
 
@@ -1038,11 +973,6 @@
 #define EDRAM0_SIZE_V(x) ((x) << EDRAM0_SIZE_S)
 #define EDRAM0_SIZE_G(x) (((x) >> EDRAM0_SIZE_S) & EDRAM0_SIZE_M)
 
-#define T7_EDRAM0_BASE_S    16
-#define T7_EDRAM0_BASE_M    0xffffU
-#define T7_EDRAM0_BASE_V(x) ((x) << T7_EDRAM0_BASE_S)
-#define T7_EDRAM0_BASE_G(x) (((x) >> T7_EDRAM0_BASE_S) & T7_EDRAM0_BASE_M)
-
 #define T7_EDRAM0_SIZE_S    0
 #define T7_EDRAM0_SIZE_M    0xffffU
 #define T7_EDRAM0_SIZE_V(x) ((x) << T7_EDRAM0_SIZE_S)
@@ -1058,11 +988,6 @@
 #define EDRAM1_SIZE_M    0xfffU
 #define EDRAM1_SIZE_V(x) ((x) << EDRAM1_SIZE_S)
 #define EDRAM1_SIZE_G(x) (((x) >> EDRAM1_SIZE_S) & EDRAM1_SIZE_M)
-
-#define T7_EDRAM1_BASE_S    16
-#define T7_EDRAM1_BASE_M    0xffffU
-#define T7_EDRAM1_BASE_V(x) ((x) << T7_EDRAM1_BASE_S)
-#define T7_EDRAM1_BASE_G(x) (((x) >> T7_EDRAM1_BASE_S) & T7_EDRAM1_BASE_M)
 
 #define T7_EDRAM1_SIZE_S    0
 #define T7_EDRAM1_SIZE_M    0xffffU
@@ -1096,32 +1021,12 @@
 #define EXT_MEM1_SIZE_V(x) ((x) << EXT_MEM1_SIZE_S)
 #define EXT_MEM1_SIZE_G(x) (((x) >> EXT_MEM1_SIZE_S) & EXT_MEM1_SIZE_M)
 
-#define T7_EXT_MEM1_BASE_S    16
-#define T7_EXT_MEM1_BASE_M    0xffffU
-#define T7_EXT_MEM1_BASE_V(x) ((x) << T7_EXT_MEM1_BASE_S)
-#define T7_EXT_MEM1_BASE_G(x) (((x) >> T7_EXT_MEM1_BASE_S) & T7_EXT_MEM1_BASE_M)
-
 #define T7_EXT_MEM1_SIZE_S    0
 #define T7_EXT_MEM1_SIZE_M    0xffffU
 #define T7_EXT_MEM1_SIZE_V(x) ((x) << T7_EXT_MEM1_SIZE_S)
 #define T7_EXT_MEM1_SIZE_G(x) (((x) >> T7_EXT_MEM1_SIZE_S) & T7_EXT_MEM1_SIZE_M)
 
 #define MA_HOST_MEMORY_BAR_A 0x77cc
-
-#define HMA_BASE_S    16
-#define HMA_BASE_M    0xfffU
-#define HMA_BASE_V(x) ((x) << HMA_BASE_S)
-#define HMA_BASE_G(x) (((x) >> HMA_BASE_S) & HMA_BASE_M)
-
-#define HMA_SIZE_S    0
-#define HMA_SIZE_M    0xfffU
-#define HMA_SIZE_V(x) ((x) << HMA_SIZE_S)
-#define HMA_SIZE_G(x) (((x) >> HMA_SIZE_S) & HMA_SIZE_M)
-
-#define HMATARGETBASE_S    16
-#define HMATARGETBASE_M    0xffffU
-#define HMATARGETBASE_V(x) ((x) << HMATARGETBASE_S)
-#define HMATARGETBASE_G(x) (((x) >> HMATARGETBASE_S) & HMATARGETBASE_M)
 
 #define T7_HMA_SIZE_S    0
 #define T7_HMA_SIZE_M    0xffffU
@@ -1138,11 +1043,6 @@
 #define EXT_MEM0_SIZE_M    0xfffU
 #define EXT_MEM0_SIZE_V(x) ((x) << EXT_MEM0_SIZE_S)
 #define EXT_MEM0_SIZE_G(x) (((x) >> EXT_MEM0_SIZE_S) & EXT_MEM0_SIZE_M)
-
-#define T7_EXT_MEM0_BASE_S    16
-#define T7_EXT_MEM0_BASE_M    0xffffU
-#define T7_EXT_MEM0_BASE_V(x) ((x) << T7_EXT_MEM0_BASE_S)
-#define T7_EXT_MEM0_BASE_G(x) (((x) >> T7_EXT_MEM0_BASE_S) & T7_EXT_MEM0_BASE_M)
 
 #define T7_EXT_MEM0_SIZE_S    0
 #define T7_EXT_MEM0_SIZE_M    0xffffU
@@ -1884,13 +1784,6 @@
 #define T7_LB_MODE_G(x) (((x) >> T7_LB_MODE_S) & T7_LB_MODE_M)
 
 #define TP_MIB_RQE_DFR_PKT_A	0x64
-#define TP_MIB_RDMA_IN_PKT_0_A 0x80
-
-#define ULP_RX_MISC_FEATURE_ENABLE_A 0x1925c
-
-#define ISCSI_ALL_CMP_MODE_S    9
-#define ISCSI_ALL_CMP_MODE_V(x) ((x) << ISCSI_ALL_CMP_MODE_S)
-#define ISCSI_ALL_CMP_MODE_F    ISCSI_ALL_CMP_MODE_V(1U)
 
 #define ULP_TX_INT_CAUSE_A	0x8dcc
 #define ULP_TX_TPT_LLIMIT_A	0x8dd4
@@ -1951,8 +1844,6 @@
 #define ULP_TX_ASIC_DEBUG_2_A 0x8f7c
 #define ULP_TX_ASIC_DEBUG_3_A 0x8f80
 #define ULP_TX_ASIC_DEBUG_4_A 0x8f84
-
-#define TP_ROCE_RRQ_BASE_A 0x95
 
 /* registers for module PM_RX */
 #define PM_RX_BASE_ADDR 0x8fc0
@@ -3057,20 +2948,6 @@
 #define SLVFIFOPARINT_V(x) ((x) << SLVFIFOPARINT_S)
 #define SLVFIFOPARINT_F    SLVFIFOPARINT_V(1U)
 
-#define ULP_RX_RRQ_LLIMIT_A 0x192c0
-#define ULP_RX_RRQ_ULIMIT_A 0x192c4
-#define ULP_RX_NVME_TCP_STAG_LLIMIT_A 0x192c8
-#define ULP_RX_NVME_TCP_STAG_ULIMIT_A 0x192cc
-#define ULP_RX_NVME_TCP_RQ_LLIMIT_A 0x192d0
-#define ULP_RX_NVME_TCP_RQ_ULIMIT_A 0x192d4
-#define ULP_RX_NVME_TCP_PBL_LLIMIT_A 0x192d8
-#define ULP_RX_NVME_TCP_PBL_ULIMIT_A 0x192dc
-#define ULP_RX_NVME_TCP_MAX_LENGTH_A 0x192e0
-#define ULP_TX_NVME_TCP_TPT_LLIMIT_A 0x8fa4
-#define ULP_TX_NVME_TCP_TPT_ULIMIT_A 0x8fa8
-#define ULP_TX_NVME_TCP_PBL_LLIMIT_A 0x8fac
-#define ULP_TX_NVME_TCP_PBL_ULIMIT_A 0x8fb0
-
 #define ULP_RX_INT_CAUSE_A 0x19158
 #define ULP_RX_ISCSI_LLIMIT_A 0x1915c
 #define ULP_RX_ISCSI_ULIMIT_A 0x19160
@@ -3805,24 +3682,6 @@
 #define T7_UP_OBQ_0_SHADOW_REALADDR_A 0x704
 
 
-#define ULP_RX_CTL1_A 0x19330
-
-#define ISCSI_CTL2_S    27
-#define ISCSI_CTL2_V(x) ((x) << ISCSI_CTL2_S)
-#define ISCSI_CTL2_F    ISCSI_CTL2_V(1U)
-
-#define ISCSI_CTL0_S    25
-#define ISCSI_CTL0_V(x) ((x) << ISCSI_CTL0_S)
-#define ISCSI_CTL0_F    ISCSI_CTL0_V(1U)
-
-/* registers for module ARM */
-#define ARM_BASE_ADDR 0x47000
-
-#define ARM_UART_INT_CAUSE_A 0x47158
-
-#define TX_FIFO_EMPTY_S 0
-#define TX_FIFO_EMPTY_V(x) ((x) << TX_FIFO_EMPTY_S)
-#define TX_FIFO_EMPTY_F TX_FIFO_EMPTY_V(1)
 
 /* registers for module HMA */
 #define HMA_LOCAL_DEBUG_CFG_A 0x51320

@@ -198,18 +198,6 @@ struct rsp_ctrl {
 #define QINTR_TIMER_IDX_V(x) ((x) << QINTR_TIMER_IDX_S)
 #define QINTR_TIMER_IDX_G(x) (((x) >> QINTR_TIMER_IDX_S) & QINTR_TIMER_IDX_M)
 
-#define ARM_QTYPE_S    11
-#define ARM_QTYPE_M    1
-#define ARM_QTYPE_V(x) ((x) << ARM_QTYPE_S)
-
-#define ARM_PIDX_S    0
-#define ARM_PIDX_M    0x7ffU
-#define ARM_PIDX_V(x) ((x) << ARM_PIDX_S)
-
-#define ARM_CIDXINC_S    0
-#define ARM_CIDXINC_M    0x7ffU
-#define ARM_CIDXINC_V(x) ((x) << ARM_CIDXINC_S)
-
 /*
  * Flash layout.
  */
