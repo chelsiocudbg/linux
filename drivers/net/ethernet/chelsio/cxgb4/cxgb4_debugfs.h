@@ -58,18 +58,6 @@ struct seq_tab {
 	char data[];             /* the table data */
 };
 
-#define DEFINE_SIMPLE_DEBUGFS_FILE(name) \
-static int name##_open(struct inode *inode, struct file *file) \
-{ \
-        return single_open(file, name##_show, inode->i_private); \
-} \
-static const struct file_operations name##_debugfs_fops = { \
-        .owner   = THIS_MODULE, \
-        .open    = name##_open, \
-        .read    = seq_read, \
-        .llseek  = seq_lseek, \
-        .release = single_release \
-}
 
 static inline unsigned int hex2val(char c)
 {
