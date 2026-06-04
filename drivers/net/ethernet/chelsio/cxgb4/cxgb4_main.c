@@ -6741,7 +6741,7 @@ int cxgb4_adap_probe(struct adapter *adapter)
 	 * TODO: currently VPD parameter reading on the platform device is not working.
 	 * disable it for now; we will fix it later.
 	 */
-	err = adap_init0(adapter, 1);
+	err = adap_init0(adapter, 0);
 	if (err)
 		dev_err(adapter->pdev_dev,
 				"Adapter initialization failed, error %d. Continuing in debug mode\n",
