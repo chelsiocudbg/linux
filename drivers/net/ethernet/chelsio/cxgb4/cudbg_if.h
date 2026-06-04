@@ -6,6 +6,12 @@
 #ifndef __CUDBG_IF_H__
 #define __CUDBG_IF_H__
 
+#ifdef __GNUC__
+#define ATTRIBUTE_UNUSED __attribute__ ((unused))
+#else
+#define ATTRIBUTE_UNUSED
+#endif
+
 /* Error codes */
 #define CUDBG_STATUS_NO_MEM -19
 #define CUDBG_STATUS_ENTITY_NOT_FOUND -24

@@ -23,7 +23,6 @@ void cxgb4_pci_setup_memwin_rdma(struct adapter *adap);
 void cxgb4_pci_fw_free(struct adapter *adap);
 int cxgb4_pci_fw_init(struct adapter *adap, enum dev_state *state);
 int cxgb4_pci_device_id(struct adapter *adap);
-bool cxgb4_pci_relaxed_ordering_enabled(struct adapter *adap);
 bool cxgb4_pci_msix_enabled(struct adapter *adap);
 bool cxgb4_pci_msi_enabled(struct adapter *adap);
 int cxgb4_pci_read_config_word(struct adapter *adap, int where, u16 *val);

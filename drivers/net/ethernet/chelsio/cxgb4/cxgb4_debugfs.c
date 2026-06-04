@@ -3859,37 +3859,30 @@ static int chcr_stats_show(struct seq_file *seq, void *v)
 	int i = 0;
 #endif
 	struct adapter *adap = d->adap;
-	struct chcr_stats_debug *chcr_stats;
 
-	chcr_stats = &adap->uld_inst.stats.chcr;
 	seq_puts(seq, "Chelsio Crypto Accelerator Stats \n");
 	seq_printf(seq, "Cipher Ops: %10u \n",
-		   atomic_read(&chcr_stats->cipher_rqst));
+		   atomic_read(&adap->chcr_stats.cipher_rqst));
 	seq_printf(seq, "Digest Ops: %10u \n",
-		   atomic_read(&chcr_stats->digest_rqst));
+		   atomic_read(&adap->chcr_stats.digest_rqst));
 	seq_printf(seq, "Aead Ops: %10u \n",
-		   atomic_read(&chcr_stats->aead_rqst));
+		   atomic_read(&adap->chcr_stats.aead_rqst));
 	seq_printf(seq, "Completion: %10u \n",
-		   atomic_read(&chcr_stats->complete));
+		   atomic_read(&adap->chcr_stats.complete));
 	seq_printf(seq, "Error: %10u \n",
-		   atomic_read(&chcr_stats->error));
+		   atomic_read(&adap->chcr_stats.error));
 	seq_printf(seq, "Fallback: %10u \n",
-		   atomic_read(&chcr_stats->fallback));
+		   atomic_read(&adap->chcr_stats.fallback));
 	seq_printf(seq, "TLS PDU Tx: %10u\n",
-		   atomic_read(&chcr_stats->tls_pdu_tx));
+		   atomic_read(&adap->chcr_stats.tls_pdu_tx));
 	seq_printf(seq, "TLS PDU Rx: %10u\n",
-		   atomic_read(&chcr_stats->tls_pdu_rx));
+		   atomic_read(&adap->chcr_stats.tls_pdu_rx));
 	seq_printf(seq, "TLS Keys (DDR) Count: %10u\n",
-		   atomic_read(&chcr_stats->tls_key));
+		   atomic_read(&adap->chcr_stats.tls_key));
 #if IS_ENABLED(CONFIG_CHELSIO_IPSEC_INLINE)
-	struct ch_ipsec_stats_debug *ch_ipsec_stats;
-	ch_ipsec_stats = &adap->uld_inst.stats.ipsec;
 	seq_puts(seq, "\nChelsio Inline IPsec Crypto Accelerator Stats\n");
 	seq_printf(seq, "IPSec PDU: %10u\n",
-		   atomic_read(&ch_ipsec_stats->ipsec_cnt));
-
-	if (cxgb4_ulds[CXGB4_ULD_IPSEC].ch_ipsec_show)
-		cxgb4_ulds[CXGB4_ULD_IPSEC].ch_ipsec_show(adap, seq);
+		   atomic_read(&adap->ch_ipsec_stats.ipsec_cnt));
 #endif
 #if IS_ENABLED(CONFIG_CHELSIO_TLS_DEVICE)
 	seq_puts(seq, "\nChelsio KTLS Crypto Accelerator Stats\n");

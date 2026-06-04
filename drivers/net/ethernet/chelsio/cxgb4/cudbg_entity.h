@@ -6,6 +6,12 @@
 #ifndef __CUDBG_ENTITY_H__
 #define __CUDBG_ENTITY_H__
 
+#ifdef __GNUC__
+#define ATTRIBUTE_UNUSED __attribute__ ((unused))
+#else
+#define ATTRIBUTE_UNUSED
+#endif
+
 #define EDC0_FLAG 0
 #define EDC1_FLAG 1
 #define MC_FLAG 2
@@ -162,13 +168,13 @@ static const char * const cudbg_region[] = {
 /* Memory region info relative to current memory (i.e. wrt 0). */
 struct cudbg_region_info {
 	bool exist; /* Does region exists in current memory? */
-	u32 start;  /* Start wrt 0 */
-	u32 end;    /* End wrt 0 */
+	u64 start;  /* Start wrt 0 */
+	u64 end;    /* End wrt 0 */
 };
 
 struct cudbg_mem_desc {
-	u32 base;
-	u32 limit;
+	u64 base;
+	u64 limit;
 	u32 idx;
 };
 

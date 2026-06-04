@@ -15,6 +15,7 @@
 #include "cudbg_lib.h"
 #include "cudbg_zlib.h"
 #include "cxgb4_tc_mqprio.h"
+#include "cudbg_indir_reg.h"
 
 static const u32 t6_tp_pio_array[][IREG_NUM_ELEM] = {
 	{0x7e40, 0x7e44, 0x020, 28}, /* t6_tp_pio_regs_20_to_3b */
@@ -775,9 +776,9 @@ int cudbg_fill_meminfo(struct adapter *padap,
 	md->limit = 0;
 	md++;
 
-	md->base = padap->uld_inst.vres.ocq.start;
-	if (padap->uld_inst.vres.ocq.size)
-		md->limit = md->base + padap->uld_inst.vres.ocq.size - 1;
+	md->base = padap->vres.ocq.start;
+	if (padap->vres.ocq.size)
+		md->limit = md->base + padap->vres.ocq.size - 1;
 	else
 		md->idx = ARRAY_SIZE(cudbg_region);  /* hide it */
 	md++;
@@ -2643,8 +2644,8 @@ int cudbg_collect_tid(struct cudbg_init *pdbg_init,
 		tid->nuotids += val[1] - val[0] + 1;
 	}
 
-	tid->IP_users = t4_read_reg(padap, LE_DB_ACT_CNT_IPV4_A);
-	tid->IPv6_users = t4_read_reg(padap, LE_DB_ACT_CNT_IPV6_A);
+	tid->ip_users = t4_read_reg(padap, LE_DB_ACT_CNT_IPV4_A);
+	tid->ipv6_users = t4_read_reg(padap, LE_DB_ACT_CNT_IPV6_A);
 
 #undef FW_PARAM_PFVF_A
 #undef FW_PARAM_DEV_A

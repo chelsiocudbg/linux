@@ -46,8 +46,6 @@ int cxgb4_pci_resource_init(struct adapter *adap)
                goto out_disable_device;
        }
 
-       adap->regs_start = 0;
-
        adap->sge.tx_db_addr = adap->regs + MYPF_REG(SGE_PF_KDOORBELL_A);
        adap->sge.rx_db_addr = adap->regs + MYPF_REG(SGE_PF_GTS_A);
 
@@ -182,13 +180,13 @@ void cxgb4_pci_setup_memwin_rdma(struct adapter *adap)
        unsigned int sz_kb;
        u32 start;
 
-       if (!adap->uld_inst.vres.ocq.size)
+       if (!adap->vres.ocq.size)
                return;
 
        start = t4_read_pcie_cfg4(adap, PCI_BASE_ADDRESS_2);
        start &= PCI_BASE_ADDRESS_MEM_MASK;
-       start += OCQ_WIN_OFFSET(adap->pdev, &adap->uld_inst.vres);
-       sz_kb = roundup_pow_of_two(adap->uld_inst.vres.ocq.size) >> WINDOW_SHIFT_X;
+       start += OCQ_WIN_OFFSET(adap->pdev, &adap->vres);
+       sz_kb = roundup_pow_of_two(adap->vres.ocq.size) >> WINDOW_SHIFT_X;
 
        /*
         * Set up RDMA memory window for accessing adapter memory
@@ -197,7 +195,7 @@ void cxgb4_pci_setup_memwin_rdma(struct adapter *adap)
         */
        t4_write_reg(adap, t4_pcie_mem_access_base_win_reg(adap, MEMWIN_RDMA),
                     start | BIR_V(1) | WINDOW_V(ilog2(sz_kb)));
-       t4_pcie_mem_access_offset_write(adap, adap->uld_inst.vres.ocq.start,
+       t4_pcie_mem_access_offset_write(adap, adap->vres.ocq.start,
                                        MEMWIN_RDMA, 0);
 }
 
@@ -227,11 +225,6 @@ int cxgb4_pci_fw_init(struct adapter *adap, enum dev_state *state)
 int cxgb4_pci_device_id(struct adapter *adap)
 {
        return adap->pdev->device;
-}
-
-bool cxgb4_pci_relaxed_ordering_enabled(struct adapter *adap)
-{
-       return pcie_relaxed_ordering_enabled(adap->pdev);
 }
 
 bool cxgb4_pci_msix_enabled(struct adapter *adap)
