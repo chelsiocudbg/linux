@@ -6231,6 +6231,7 @@ static void free_some_resources(struct adapter *adapter)
 
 	kvfree(adapter->smt);
 	kvfree(adapter->l2t);
+	kvfree(adapter->srq);
 	t4_cleanup_sched(adapter);
 	kvfree(adapter->tids.tid_tab);
 	cxgb4_cleanup_tc_matchall(adapter);

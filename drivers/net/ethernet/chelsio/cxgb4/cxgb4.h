@@ -652,7 +652,7 @@ struct link_config {
 enum {
 	MAX_ETH_QSETS = 32,           /* # of Ethernet Tx/Rx queue sets */
 	MAX_OFLD_QSETS = 16,          /* # of offload Tx, iscsi Rx queue sets */
-	MAX_CTRL_QUEUES = NCHAN,      /* # of control Tx queues */
+	MAX_CTRL_QUEUES = NCHAN * MAX_UP_CORES,      /* # of control Tx queues */
 };
 
 enum {
