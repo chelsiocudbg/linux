@@ -2902,7 +2902,10 @@ static int sge_qinfo_show(struct seq_file *seq, void *v)
 	const struct sge_uld_txq_info *utxq_info;
 	const struct sge_uld_rxq_info *urxq_info;
 	struct cxgb4_tc_port_mqprio *port_mqprio;
-	struct adapter *adap = seq->private;
+
+	struct t4_linux_debugfs_data *d = seq->private;
+	struct adapter *adap = d->adap;
+
 	int i, j, n, r = (uintptr_t)v - 1;
 	struct sge *s = &adap->sge;
 
@@ -2927,7 +2930,7 @@ do { \
 #define R(s, v) S3("u", s, rx[i].v)
 #define RL(s, v) R3("lu", s, v)
 
-			if (r < eth_entries) {
+	if (r < eth_entries) {
 		int base_qset = r * 4;
 		const struct sge_eth_rxq *rx = &s->ethrxq[base_qset];
 		const struct sge_eth_txq *tx = &s->ethtxq[base_qset];
@@ -2987,7 +2990,7 @@ do { \
 		goto out;
 	}
 
-r -= eth_entries;
+	r -= eth_entries;
 	for_each_port(adap, j) {
 		struct port_info *pi = adap2pinfo(adap, j);
 		const struct sge_eth_rxq *rx;
@@ -3048,7 +3051,8 @@ r -= eth_entries;
 		mutex_unlock(&adap->tc_mqprio->mqprio_mutex);
 		goto skip_mqprio;
 	}
-eohw_entries = DIV_ROUND_UP(adap->sge.eoqsets, 4);
+
+	eohw_entries = DIV_ROUND_UP(adap->sge.eoqsets, 4);
 	if (r < eohw_entries) {
 		int base_qset = r * 4;
 		const struct sge_ofld_rxq *rx = &s->eohw_rxq[base_qset];
@@ -3345,7 +3349,6 @@ skip_mqprio:
 skip_uld:
 	if (r < ctrl_entries) {
 		const struct sge_ctrl_txq *tx = &s->ctrlq[r * 4];
-
 		n = min(4, adap->params.nports - 4 * r);
 
 		S("QType:", "Control");
@@ -3450,7 +3453,10 @@ lld_only:
 
 static void *sge_queue_start(struct seq_file *seq, loff_t *pos)
 {
-	int entries = sge_queue_entries(seq->private);
+	struct t4_linux_debugfs_data *d = seq->private;
+        struct adapter *adap = d->adap;
+
+	int entries = sge_queue_entries(adap);
 
 	return *pos < entries ? (void *)((uintptr_t)*pos + 1) : NULL;
 }
@@ -3461,7 +3467,10 @@ static void sge_queue_stop(struct seq_file *seq, void *v)
 
 static void *sge_queue_next(struct seq_file *seq, void *v, loff_t *pos)
 {
-	int entries = sge_queue_entries(seq->private);
+	struct t4_linux_debugfs_data *d = seq->private;
+        struct adapter *adap = d->adap;
+
+	int entries = sge_queue_entries(adap);
 
 	++*pos;
 	return *pos < entries ? (void *)((uintptr_t)*pos + 1) : NULL;
