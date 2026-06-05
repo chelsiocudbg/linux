@@ -500,7 +500,7 @@ unsigned int t4_pcie_mem_access_offset_reg(struct adapter *adap, int win)
 	return PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_OFFSET_A, win);
 }
 
-void t4_pcie_mem_access_offset_write(struct adapter *adap, u64 off, int win,
+void t4_pcie_mem_access_offset_write(struct adapter *adap, u32 off, int win,
 		u32 pf)
 {
 	u32 reg = t4_pcie_mem_access_offset_reg(adap, win);
@@ -527,8 +527,8 @@ void t4_pcie_mem_access_offset_write(struct adapter *adap, u64 off, int win,
  *
  * Get the configured memory window's relative offset, base, and size.
  */
-int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u64 *mem_off,
-		      u64 *mem_base, u64 *mem_aperture)
+int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u32 *mem_off,
+		      u32 *mem_base, u32 *mem_aperture)
 {
 	u64 edc_size, mc_size, mem_reg;
 
@@ -582,7 +582,7 @@ int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u64 *mem_off,
  *
  * Read/Write residual data less than 32-bits.
  */
-void t4_memory_rw_residual(struct adapter *adap, u64 off, u64 addr, u8 *buf,
+void t4_memory_rw_residual(struct adapter *adap, u32 off, u32 addr, u8 *buf,
 			   int dir)
 {
 	union {
@@ -623,11 +623,11 @@ void t4_memory_rw_residual(struct adapter *adap, u64 off, u64 addr, u8 *buf,
  *	contains data structures which contain multi-byte integers, it's the
  *	caller's responsibility to perform appropriate byte order conversions.
  */
-int t4_memory_rw(struct adapter *adap, int win, int mtype, u64 addr,
-		 u64 len, void *hbuf, int dir)
+int t4_memory_rw(struct adapter *adap, int win, int mtype, u32 addr,
+		 u32 len, void *hbuf, int dir)
 {
-	u64 pos, offset, resid, memoffset, mem_aperture, mem_base;
-	u32 win_pf;
+	u32 pos, offset, resid, memoffset;
+	u32 win_pf, mem_aperture, mem_base;
 	u32 *buf;
 	int ret;
 

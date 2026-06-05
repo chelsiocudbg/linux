@@ -6,12 +6,6 @@
 #ifndef __CUDBG_IF_H__
 #define __CUDBG_IF_H__
 
-#ifdef __GNUC__
-#define ATTRIBUTE_UNUSED __attribute__ ((unused))
-#else
-#define ATTRIBUTE_UNUSED
-#endif
-
 /* Error codes */
 #define CUDBG_STATUS_NO_MEM -19
 #define CUDBG_STATUS_ENTITY_NOT_FOUND -24
@@ -19,8 +13,6 @@
 #define CUDBG_SYSTEM_ERROR -29
 #define CUDBG_STATUS_CCLK_NOT_DEFINED -32
 #define CUDBG_STATUS_PARTIAL_DATA -41
-#define CUDBG_STATUS_NO_SCRATCH_MEM         -19
-
 
 #define CUDBG_MAJOR_VERSION 1
 #define CUDBG_MINOR_VERSION 14

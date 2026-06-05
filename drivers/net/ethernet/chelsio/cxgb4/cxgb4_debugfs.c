@@ -209,14 +209,14 @@ static int cim_la_open(struct inode *inode, struct file *file)
 
 	if (CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T6) {
 		p = seq_open_tab(file, adap->params.cim_la_size / 10,
-				10 * sizeof(u32), 1,
-				cfg & UPDBGLACAPTPCONLY_F ?
-				cim_la_show_pc_t6 : cim_la_show_t6);
+				 10 * sizeof(u32), 1,
+				 cfg & UPDBGLACAPTPCONLY_F ?
+				 cim_la_show_pc_t6 : cim_la_show_t6);
 	} else {
 		p = seq_open_tab(file, adap->params.cim_la_size / 8,
-				8 * sizeof(u32), 1,
-				cfg & UPDBGLACAPTPCONLY_F ?
-				cim_la_show_3in1 : cim_la_show);
+				 8 * sizeof(u32), 1,
+				 cfg & UPDBGLACAPTPCONLY_F ? cim_la_show_3in1 :
+							     cim_la_show);
 	}
 	if (!p)
 		return -ENOMEM;
@@ -456,17 +456,16 @@ static int cim_qcfg_show(struct seq_file *seq, void *v)
 			   QUESOPCNT_G(p[3]), QUEEOPCNT_G(p[3]),
 			   QUEREMFLITS_G(p[2]) * 16);
 	return 0;
-
 }
 DEFINE_SHOW_ATTRIBUTE(cim_qcfg);
 
 static int cimq_show(struct seq_file *seq, void *v, int idx)
 {
-        const u32 *p = v;
+	const u32 *p = v;
 
-        seq_printf(seq, "%#06x: %08x %08x %08x %08x\n", idx * 16, p[0], p[1],
-                   p[2], p[3]);
-        return 0;
+	seq_printf(seq, "%#06x: %08x %08x %08x %08x\n", idx * 16, p[0], p[1],
+		   p[2], p[3]);
+	return 0;
 }
 
 static int cim_ibq_open(struct inode *inode, struct file *file)
@@ -483,7 +482,7 @@ static int cim_ibq_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 
 	ret = t4_read_cim_ibq_core(adap, coreid, qid, (u32 *)p->data,
-			CIM_IBQ_SIZE * 4);
+				   CIM_IBQ_SIZE * 4);
 	if (ret < 0)
 		seq_release_private(inode, file);
 	else
@@ -513,7 +512,7 @@ static int cim_obq_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 
 	ret = t4_read_cim_obq_core(adap, coreid, qid, (u32 *)p->data,
-			6 * CIM_OBQ_SIZE * 4);
+				   6 * CIM_OBQ_SIZE * 4);
 	if (ret < 0) {
 		seq_release_private(inode, file);
 	} else {
@@ -2756,7 +2755,9 @@ static int dcb_info_show(struct seq_file *seq, void *v)
 
 static inline void *dcb_info_get_idx(struct adapter *adap, loff_t pos)
 {
-	return pos <= adap->params.nports ? (void *)((uintptr_t)pos + 1) : NULL;
+	return (pos <= adap->params.nports
+		      ? (void *)((uintptr_t)pos + 1)
+		      : NULL);
 }
 
 static void *dcb_info_start(struct seq_file *seq, loff_t *pos)
@@ -2764,7 +2765,9 @@ static void *dcb_info_start(struct seq_file *seq, loff_t *pos)
 	struct t4_linux_debugfs_data *d = seq->private;
 	struct adapter *adap = d->adap;
 
-	return *pos ? dcb_info_get_idx(adap, *pos) : SEQ_START_TOKEN;
+	return (*pos
+		? dcb_info_get_idx(adap, *pos)
+		: SEQ_START_TOKEN);
 }
 
 static void dcb_info_stop(struct seq_file *seq, void *v)
@@ -3101,7 +3104,8 @@ do { \
 		mutex_unlock(&adap->tc_mqprio->mqprio_mutex);
 		goto out;
 	}
-r -= eohw_entries;
+
+	r -= eohw_entries;
 	for (j = 0; j < adap->params.nports; j++) {
 		int entries;
 		u8 tc;
@@ -3620,7 +3624,7 @@ static int tid_info_show(struct seq_file *seq, void *v)
 			   t->v6_stids_in_use);
 	if (t->natids)
 		seq_printf(seq, "ATID range: 0..%u, in use: %u\n",
-			t->natids - 1, t->atids_in_use);
+			   t->natids - 1, t->atids_in_use);
 	seq_printf(seq, "FTID range: %u..%u\n", t->ftid_base,
 		   t->ftid_base + t->nftids - 1);
 	if (t->nsftids)
@@ -3631,8 +3635,9 @@ static int tid_info_show(struct seq_file *seq, void *v)
 		seq_printf(seq, "HPFTID range: %u..%u\n", t->hpftid_base,
 			   t->hpftid_base + t->nhpftids - 1);
 	if (t->neotids)
-		seq_printf(seq, "UOTID range: %u..%u, in use: %u\n", t->eotid_base,
-			   t->eotid_base + t->neotids - 1, atomic_read(&t->eotids_in_use));
+		seq_printf(seq, "UOTID range: %u..%u, in use: %u\n",
+			   t->eotid_base, t->eotid_base + t->neotids - 1,
+			   atomic_read(&t->eotids_in_use));
 	if (t->ntids)
 		seq_printf(seq, "HW TID usage: %u IP users, %u IPv6 users\n",
 			   t4_read_reg(adap, LE_DB_ACT_CNT_IPV4_A),
@@ -3640,97 +3645,6 @@ static int tid_info_show(struct seq_file *seq, void *v)
 	return 0;
 }
 DEFINE_SHOW_ATTRIBUTE(tid_info);
-
-#if 0
-static int tids_info_show(struct seq_file *seq, void *v)
-{
-	struct adapter *adap = seq->private;
-	const struct cxgb4_tid_info *t;
-
-	if (!(adap->flags & CXGB4_FULL_INIT_DONE))
-		return 0;
-
-	t = &adap->tidinfo;
-	seq_printf(seq, "Connections in use: %u\n",
-			t->tids.in_use + t->tids.range_in_use / t->tids.max_range +
-			t->hashcoll_tids.in_use +
-			t->hashcoll_tids.range_in_use / t->hashcoll_tids.max_range +
-			t->hashtids.in_use +
-			t->hashtids.range_in_use / t->hashtids.max_range);
-
-	if (t->hpftids.size)
-		seq_printf(seq, "HPFTID range: %u..%u in use-IPv4/IPv6: %u/%u\n",
-				t->hpftids.start,
-				t->hpftids.start + t->hpftids.size - 1,
-				t->hpftids.in_use, t->hpftids.range_in_use);
-
-	if (t->hashtids.size) {
-		seq_printf(seq, "TID range: %u..%u/%u..%u",
-				t->hashcoll_tids.start,
-				t->hashcoll_tids.start + t->hashcoll_tids.size - 1,
-				t->hashtids.start,
-				t->hashtids.start + t->hashtids.size - 1);
-		seq_printf(seq, ", in use IPv4: %u/%u",
-				t->tids.in_use + t->hashcoll_tids.in_use,
-				t->hashtids.in_use);
-		seq_printf(seq, ", in use IPv6: %u/%u\n",
-				t->tids.range_in_use + t->hashcoll_tids.range_in_use,
-				t->hashtids.range_in_use);
-	} else if (t->tids.size) {
-		unsigned int chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
-		unsigned int server_base, hash_base;
-
-		if (chip_ver > CHELSIO_T5) {
-			server_base = t4_read_reg(adap, LE_DB_SRVR_START_INDEX_A);
-			hash_base = t4_read_reg(adap, T6_LE_DB_HASH_TID_BASE_A);
-		} else {
-			server_base = t4_read_reg(adap, LE_DB_SERVER_INDEX_A) / 4;
-			hash_base = t4_read_reg(adap, LE_DB_TID_HASHBASE_A);
-		}
-		seq_printf(seq, "TID range: %u..%u/%u..%u",
-				t->tids.start,
-				server_base - 1,
-				hash_base,
-				t->tids.start + t->tids.size - 1);
-		seq_printf(seq, ", in use-IPv4/IPv6: %u/%u\n",
-				t->tids.in_use, t->tids.range_in_use);
-	}
-
-	if (t->stids.size)
-		seq_printf(seq, "STID range: %u..%u, in use-IPv4/IPv6: %u/%u\n",
-				t->stids.start, t->stids.start + t->stids.size - 1,
-				t->stids.in_use, t->stids.range_in_use);
-
-	if (t->atids.size)
-		seq_printf(seq, "ATID range: %u..%u, in use: %u\n",
-				t->atids.start, t->atids.start + t->atids.size - 1,
-				t->atids.in_use);
-
-	if (t->ftids.size)
-		seq_printf(seq, "FTID range: %u..%u in use-IPv4/IPv6: %u/%u\n",
-				t->ftids.start, t->ftids.start + t->ftids.size - 1,
-				t->ftids.in_use, t->ftids.range_in_use);
-
-	if (t->sftids.size)
-		seq_printf(seq, "SFTID range: %u..%u in use: %u\n",
-				t->sftids.start,
-				t->sftids.start + t->sftids.size - 1,
-				t->sftids.in_use);
-
-	if (t->uotids.size)
-		seq_printf(seq, "UOTID range: %u..%u, in use: %u\n",
-				t->uotids.start,
-				t->uotids.start + t->uotids.size - 1,
-				t->uotids.in_use);
-
-	if (t->tids.size)
-		seq_printf(seq, "HW TID usage: %u IP users, %u IPv6 users\n",
-				t4_read_reg(adap, LE_DB_ACT_CNT_IPV4_A),
-				t4_read_reg(adap, LE_DB_ACT_CNT_IPV6_A));
-	return 0;
-}
-DEFINE_SHOW_ATTRIBUTE(tids_info);
-#endif
 
 static ssize_t blocked_fl_read(struct file *filp, char __user *ubuf,
 			       size_t count, loff_t *ppos)
@@ -4157,125 +4071,125 @@ void add_debugfs_files(struct adapter *adap, struct dentry *dentry,
 
 static void add_debugfs_files_multicore(struct adapter *adap)
 {
-        static struct t4_linux_debugfs_entry common_files[] = {
-                { "cim_la", &cim_la_fops, 0400, 0 },
-                { "cim_pif_la", &cim_pif_la_fops, 0400, 0 },
-                { "cim_ma_la", &cim_ma_la_fops, 0400, 0 },
+	static struct t4_linux_debugfs_entry common_files[] = {
+		{ "cim_la", &cim_la_fops, 0400, 0 },
+		{ "cim_pif_la", &cim_pif_la_fops, 0400, 0 },
+		{ "cim_ma_la", &cim_ma_la_fops, 0400, 0 },
 		{ "cim_qcfg", &cim_qcfg_fops, 0400, 0 },
-                { "devlog", &devlog_fops, 0400, 0 },
-        };
-        static struct t4_linux_debugfs_entry t4_files[] = {
-                { "ibq_tp0", &cim_ibq_fops, 0400, 0 },
-                { "ibq_tp1", &cim_ibq_fops, 0400, 1 },
-                { "ibq_ulp", &cim_ibq_fops, 0400, 2 },
-                { "ibq_sge0", &cim_ibq_fops, 0400, 3 },
-                { "ibq_sge1", &cim_ibq_fops, 0400, 4 },
-                { "ibq_ncsi", &cim_ibq_fops, 0400, 5 },
-                { "obq_ulp0", &cim_obq_fops, 0400, 0 },
-                { "obq_ulp1", &cim_obq_fops, 0400, 1 },
-                { "obq_ulp2", &cim_obq_fops, 0400, 2 },
-                { "obq_ulp3", &cim_obq_fops, 0400, 3 },
-                { "obq_sge", &cim_obq_fops, 0400, 4 },
-                { "obq_ncsi", &cim_obq_fops, 0400, 5 },
-        };
-        static struct t4_linux_debugfs_entry t5_files[] = {
-                { "ibq_tp0", &cim_ibq_fops, 0400, 0 },
-                { "ibq_tp1", &cim_ibq_fops, 0400, 1 },
-                { "ibq_ulp", &cim_ibq_fops, 0400, 2 },
-                { "ibq_sge0", &cim_ibq_fops, 0400, 3 },
-                { "ibq_sge1", &cim_ibq_fops, 0400, 4 },
-                { "ibq_ncsi", &cim_ibq_fops, 0400, 5 },
-                { "obq_ulp0", &cim_obq_fops, 0400, 0 },
-                { "obq_ulp1", &cim_obq_fops, 0400, 1 },
-                { "obq_ulp2", &cim_obq_fops, 0400, 2 },
-                { "obq_ulp3", &cim_obq_fops, 0400, 3 },
-                { "obq_sge", &cim_obq_fops, 0400, 4 },
-                { "obq_ncsi", &cim_obq_fops, 0400, 5 },
-                { "obq_sge_rx_q0", &cim_obq_fops, 0400, 6 },
-                { "obq_sge_rx_q1", &cim_obq_fops, 0400, 7 },
-        };
-        static struct t4_linux_debugfs_entry t7_files[] = {
-                { "ibq_tp0", &cim_ibq_fops, 0400, 0 },
-                { "ibq_tp1", &cim_ibq_fops, 0400, 1 },
-                { "ibq_tp2", &cim_ibq_fops, 0400, 2 },
-                { "ibq_tp3", &cim_ibq_fops, 0400, 3 },
-                { "ibq_ulp", &cim_ibq_fops, 0400, 4 },
-                { "ibq_sge0", &cim_ibq_fops, 0400, 5 },
-                { "ibq_sge1", &cim_ibq_fops, 0400, 6 },
-                { "ibq_ncsi", &cim_ibq_fops, 0400, 7 },
-                { "ibq_ipc1", &cim_ibq_fops, 0400, 9 },
-                { "ibq_ipc2", &cim_ibq_fops, 0400, 10 },
-                { "ibq_ipc3", &cim_ibq_fops, 0400, 11 },
-                { "ibq_ipc4", &cim_ibq_fops, 0400, 12 },
-                { "ibq_ipc5", &cim_ibq_fops, 0400, 13 },
-                { "ibq_ipc6", &cim_ibq_fops, 0400, 14 },
-                { "ibq_ipc7", &cim_ibq_fops, 0400, 15 },
-                { "obq_ulp0", &cim_obq_fops, 0400, 0 },
-                { "obq_ulp1", &cim_obq_fops, 0400, 1 },
-                { "obq_ulp2", &cim_obq_fops, 0400, 2 },
-                { "obq_ulp3", &cim_obq_fops, 0400, 3 },
-                { "obq_sge", &cim_obq_fops, 0400, 4 },
-                { "obq_ncsi", &cim_obq_fops, 0400, 5 },
-                { "obq_sge_rx_q0", &cim_obq_fops, 0400, 6 },
-                { "obq_ipc1", &cim_obq_fops, 0400, 9 },
-                { "obq_ipc2", &cim_obq_fops, 0400, 10 },
-                { "obq_ipc3", &cim_obq_fops, 0400, 11 },
-                { "obq_ipc4", &cim_obq_fops, 0400, 12 },
-                { "obq_ipc5", &cim_obq_fops, 0400, 13 },
-                { "obq_ipc6", &cim_obq_fops, 0400, 14 },
-                { "obq_ipc7", &cim_obq_fops, 0400, 15 },
-        };
-        static struct t4_linux_debugfs_entry t7_sec_files[] = {
-                { "ibq_tp0", &cim_ibq_fops, 0400, 0 },
-                { "ibq_tp1", &cim_ibq_fops, 0400, 1 },
-                { "ibq_tp2", &cim_ibq_fops, 0400, 2 },
-                { "ibq_tp3", &cim_ibq_fops, 0400, 3 },
-                { "ibq_ulp", &cim_ibq_fops, 0400, 4 },
-                { "ibq_sge0", &cim_ibq_fops, 0400, 5 },
-                { "ibq_ipc0", &cim_ibq_fops, 0400, 9 },
-                { "obq_ulp0", &cim_obq_fops, 0400, 0 },
-                { "obq_ulp1", &cim_obq_fops, 0400, 1 },
-                { "obq_ulp2", &cim_obq_fops, 0400, 2 },
-                { "obq_ulp3", &cim_obq_fops, 0400, 3 },
-                { "obq_sge", &cim_obq_fops, 0400, 4 },
-                { "obq_sge_rx_q0", &cim_obq_fops, 0400, 6 },
-                { "obq_ipc0", &cim_obq_fops, 0400, 9 },
-        };
-        u32 chip = CHELSIO_CHIP_VERSION(adap->params.chip);
-        char name[8];
-        u8 i;
+		{ "devlog", &devlog_fops, 0400, 0 },
+	};
+	static struct t4_linux_debugfs_entry t4_files[] = {
+		{ "ibq_tp0", &cim_ibq_fops, 0400, 0 },
+		{ "ibq_tp1", &cim_ibq_fops, 0400, 1 },
+		{ "ibq_ulp", &cim_ibq_fops, 0400, 2 },
+		{ "ibq_sge0", &cim_ibq_fops, 0400, 3 },
+		{ "ibq_sge1", &cim_ibq_fops, 0400, 4 },
+		{ "ibq_ncsi", &cim_ibq_fops, 0400, 5 },
+		{ "obq_ulp0", &cim_obq_fops, 0400, 0 },
+		{ "obq_ulp1", &cim_obq_fops, 0400, 1 },
+		{ "obq_ulp2", &cim_obq_fops, 0400, 2 },
+		{ "obq_ulp3", &cim_obq_fops, 0400, 3 },
+		{ "obq_sge", &cim_obq_fops, 0400, 4 },
+		{ "obq_ncsi", &cim_obq_fops, 0400, 5 },
+	};
+	static struct t4_linux_debugfs_entry t5_files[] = {
+		{ "ibq_tp0", &cim_ibq_fops, 0400, 0 },
+		{ "ibq_tp1", &cim_ibq_fops, 0400, 1 },
+		{ "ibq_ulp", &cim_ibq_fops, 0400, 2 },
+		{ "ibq_sge0", &cim_ibq_fops, 0400, 3 },
+		{ "ibq_sge1", &cim_ibq_fops, 0400, 4 },
+		{ "ibq_ncsi", &cim_ibq_fops, 0400, 5 },
+		{ "obq_ulp0", &cim_obq_fops, 0400, 0 },
+		{ "obq_ulp1", &cim_obq_fops, 0400, 1 },
+		{ "obq_ulp2", &cim_obq_fops, 0400, 2 },
+		{ "obq_ulp3", &cim_obq_fops, 0400, 3 },
+		{ "obq_sge", &cim_obq_fops, 0400, 4 },
+		{ "obq_ncsi", &cim_obq_fops, 0400, 5 },
+		{ "obq_sge_rx_q0", &cim_obq_fops, 0400, 6 },
+		{ "obq_sge_rx_q1", &cim_obq_fops, 0400, 7 },
+	};
+	static struct t4_linux_debugfs_entry t7_files[] = {
+		{ "ibq_tp0", &cim_ibq_fops, 0400, 0 },
+		{ "ibq_tp1", &cim_ibq_fops, 0400, 1 },
+		{ "ibq_tp2", &cim_ibq_fops, 0400, 2 },
+		{ "ibq_tp3", &cim_ibq_fops, 0400, 3 },
+		{ "ibq_ulp", &cim_ibq_fops, 0400, 4 },
+		{ "ibq_sge0", &cim_ibq_fops, 0400, 5 },
+		{ "ibq_sge1", &cim_ibq_fops, 0400, 6 },
+		{ "ibq_ncsi", &cim_ibq_fops, 0400, 7 },
+		{ "ibq_ipc1", &cim_ibq_fops, 0400, 9 },
+		{ "ibq_ipc2", &cim_ibq_fops, 0400, 10 },
+		{ "ibq_ipc3", &cim_ibq_fops, 0400, 11 },
+		{ "ibq_ipc4", &cim_ibq_fops, 0400, 12 },
+		{ "ibq_ipc5", &cim_ibq_fops, 0400, 13 },
+		{ "ibq_ipc6", &cim_ibq_fops, 0400, 14 },
+		{ "ibq_ipc7", &cim_ibq_fops, 0400, 15 },
+		{ "obq_ulp0", &cim_obq_fops, 0400, 0 },
+		{ "obq_ulp1", &cim_obq_fops, 0400, 1 },
+		{ "obq_ulp2", &cim_obq_fops, 0400, 2 },
+		{ "obq_ulp3", &cim_obq_fops, 0400, 3 },
+		{ "obq_sge", &cim_obq_fops, 0400, 4 },
+		{ "obq_ncsi", &cim_obq_fops, 0400, 5 },
+		{ "obq_sge_rx_q0", &cim_obq_fops, 0400, 6 },
+		{ "obq_ipc1", &cim_obq_fops, 0400, 9 },
+		{ "obq_ipc2", &cim_obq_fops, 0400, 10 },
+		{ "obq_ipc3", &cim_obq_fops, 0400, 11 },
+		{ "obq_ipc4", &cim_obq_fops, 0400, 12 },
+		{ "obq_ipc5", &cim_obq_fops, 0400, 13 },
+		{ "obq_ipc6", &cim_obq_fops, 0400, 14 },
+		{ "obq_ipc7", &cim_obq_fops, 0400, 15 },
+	};
+	static struct t4_linux_debugfs_entry t7_sec_files[] = {
+		{ "ibq_tp0", &cim_ibq_fops, 0400, 0 },
+		{ "ibq_tp1", &cim_ibq_fops, 0400, 1 },
+		{ "ibq_tp2", &cim_ibq_fops, 0400, 2 },
+		{ "ibq_tp3", &cim_ibq_fops, 0400, 3 },
+		{ "ibq_ulp", &cim_ibq_fops, 0400, 4 },
+		{ "ibq_sge0", &cim_ibq_fops, 0400, 5 },
+		{ "ibq_ipc0", &cim_ibq_fops, 0400, 9 },
+		{ "obq_ulp0", &cim_obq_fops, 0400, 0 },
+		{ "obq_ulp1", &cim_obq_fops, 0400, 1 },
+		{ "obq_ulp2", &cim_obq_fops, 0400, 2 },
+		{ "obq_ulp3", &cim_obq_fops, 0400, 3 },
+		{ "obq_sge", &cim_obq_fops, 0400, 4 },
+		{ "obq_sge_rx_q0", &cim_obq_fops, 0400, 6 },
+		{ "obq_ipc0", &cim_obq_fops, 0400, 9 },
+	};
+	u32 chip = CHELSIO_CHIP_VERSION(adap->params.chip);
+	char name[8];
+	u8 i;
 
-        /* Add primary core files */
-        add_debugfs_files(adap, adap->debugfs_root, 0, common_files,
-                          ARRAY_SIZE(common_files));
+	/* Add primary core files */
+	add_debugfs_files(adap, adap->debugfs_root, 0, common_files,
+			ARRAY_SIZE(common_files));
 
-        switch (chip) {
-        case CHELSIO_T4:
-                add_debugfs_files(adap, adap->debugfs_root, 0, t4_files,
-                                  ARRAY_SIZE(t4_files));
-                break;
-        case CHELSIO_T5:
-        case CHELSIO_T6:
-                add_debugfs_files(adap, adap->debugfs_root, 0, t5_files,
-                                  ARRAY_SIZE(t5_files));
-                break;
-        default:
-                add_debugfs_files(adap, adap->debugfs_root, 0, t7_files,
-                                  ARRAY_SIZE(t7_files));
-                break;
-        }
+	switch (chip) {
+		case CHELSIO_T4:
+			add_debugfs_files(adap, adap->debugfs_root, 0, t4_files,
+					ARRAY_SIZE(t4_files));
+			break;
+		case CHELSIO_T5:
+		case CHELSIO_T6:
+			add_debugfs_files(adap, adap->debugfs_root, 0, t5_files,
+					ARRAY_SIZE(t5_files));
+			break;
+		default:
+			add_debugfs_files(adap, adap->debugfs_root, 0, t7_files,
+					ARRAY_SIZE(t7_files));
+			break;
+	}
 
-        /* Add secondary core files */
-        for (i = 1; i < adap->params.num_up_cores; i++) {
-                snprintf(name, sizeof(name), "core_%u", i);
-                adap->debugfs_multicore[i] =
-                        debugfs_create_dir(name, adap->debugfs_root);
+	/* Add secondary core files */
+	for (i = 1; i < adap->params.num_up_cores; i++) {
+		snprintf(name, sizeof(name), "core_%u", i);
+		adap->debugfs_multicore[i] =
+			debugfs_create_dir(name, adap->debugfs_root);
 
-                add_debugfs_files(adap, adap->debugfs_multicore[i], i,
-                                  common_files, ARRAY_SIZE(common_files));
-                add_debugfs_files(adap, adap->debugfs_multicore[i], i,
-                                  t7_sec_files, ARRAY_SIZE(t7_sec_files));
-        }
+		add_debugfs_files(adap, adap->debugfs_multicore[i], i,
+				common_files, ARRAY_SIZE(common_files));
+		add_debugfs_files(adap, adap->debugfs_multicore[i], i,
+				t7_sec_files, ARRAY_SIZE(t7_sec_files));
+	}
 }
 
 int t4_setup_debugfs(struct adapter *adap)

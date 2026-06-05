@@ -1,7 +1,7 @@
 #ifndef __CUDBG_INDIR_REG_T7_H__
 #define __CUDBG_INDIR_REG_T7_H__
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_cim_ctl[82] = {
+static struct cudbg_indir_reg t7_cim_ctl[82] = {
 	{ .addr = 0x2000 },
 	{ .addr = 0x2040 },
 	{ .addr = 0x2044 },
@@ -86,7 +86,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_cim_ctl[82] = {
 	{ .addr = 0x2788 },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_hmat6_local_debug_cfg[32] = {
+static struct cudbg_indir_reg t7_hmat6_local_debug_cfg[32] = {
 	{ .addr = 0xa000 },
 	{ .addr = 0xa001 },
 	{ .addr = 0xa002 },
@@ -121,7 +121,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_hmat6_local_debug_cfg[32] = {
 	{ .addr = 0xa01f },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_ma_local_debug_cfg[238] = {
+static struct cudbg_indir_reg t7_ma_local_debug_cfg[238] = {
 	{ .addr = 0xa000 },
 	{ .addr = 0xa001 },
 	{ .addr = 0xa002 },
@@ -362,14 +362,14 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_ma_local_debug_cfg[238] = {
 	{ .addr = 0xf160 },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_ma_local_debug_perf_cfg[4] = {
+static struct cudbg_indir_reg t7_ma_local_debug_perf_cfg[4] = {
 	{ .addr = 0xa000 },
 	{ .addr = 0xa1e0 },
 	{ .addr = 0xe000 },
 	{ .addr = 0xe1e0 },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_pm_rx_dbg_ctrl[57] = {
+static struct cudbg_indir_reg t7_pm_rx_dbg_ctrl[57] = {
 	{ .addr = 0x10013 },
 	{ .addr = 0x10014 },
 	{ .addr = 0x10015 },
@@ -429,7 +429,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_pm_rx_dbg_ctrl[57] = {
 	{ .addr = 0x10082 },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_pm_tx_dbg_ctrl[38] = {
+static struct cudbg_indir_reg t7_pm_tx_dbg_ctrl[38] = {
 	{ .addr = 0x10000 },
 	{ .addr = 0x10001 },
 	{ .addr = 0x10002 },
@@ -470,7 +470,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_pm_tx_dbg_ctrl[38] = {
 	{ .addr = 0x10025 },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_tp_mib_index[130] = {
+static struct cudbg_indir_reg t7_tp_mib_index[130] = {
 	{ .addr = 0x0 },
 	{ .addr = 0x1 },
 	{ .addr = 0x2 },
@@ -603,7 +603,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_tp_mib_index[130] = {
 	{ .addr = 0x9b },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_tp_pio_addr[191] = {
+static struct cudbg_indir_reg t7_tp_pio_addr[191] = {
 	{ .addr = 0x1c },
 	{ .addr = 0x1d },
 	{ .addr = 0x1e },
@@ -797,7 +797,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_tp_pio_addr[191] = {
 	{ .addr = 0x8c0 },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_tp_tm_pio_addr[14] = {
+static struct cudbg_indir_reg t7_tp_tm_pio_addr[14] = {
 	{ .addr = 0x0 },
 	{ .addr = 0x1 },
 	{ .addr = 0x2 },
@@ -814,7 +814,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_tp_tm_pio_addr[14] = {
 	{ .addr = 0xd },
 };
 
-static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_up[245] = {
+static struct cudbg_indir_reg t7_up[245] = {
 	{ .addr = 0x0 },
 	{ .addr = 0x4 },
 	{ .addr = 0x8 },
@@ -1062,7 +1062,7 @@ static struct cudbg_indir_reg ATTRIBUTE_UNUSED t7_up[245] = {
 	{ .addr = 0x7f4 },
 };
 
-static struct cudbg_indir_type_entry ATTRIBUTE_UNUSED t7_indir_type_arr[CUDBG_INDIR_TYPE_MAX] = {
+static struct cudbg_indir_type_entry t7_indir_type_arr[CUDBG_INDIR_TYPE_MAX] = {
 	[CUDBG_INDIR_TYPE_CIM_CTL] = {
 		.reg_arr = t7_cim_ctl,
 		.nentries = ARRAY_SIZE(t7_cim_ctl),

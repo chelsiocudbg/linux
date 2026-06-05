@@ -1832,7 +1832,7 @@ static inline int t4_wr_mbox_ns(struct adapter *adap, int mbox, const void *cmd,
 
 unsigned int t4_pcie_mem_access_base_win_reg(struct adapter *adap, int win);
 unsigned int t4_pcie_mem_access_offset_reg(struct adapter *adap, int win);
-void t4_pcie_mem_access_offset_write(struct adapter *adap, u64 off, int win,
+void t4_pcie_mem_access_offset_write(struct adapter *adap, u32 off, int win,
                                      u32 pf);
 /**
  *	hash_mac_addr - return the hash value of a MAC address
@@ -1924,14 +1924,14 @@ u32 t4_read_pcie_cfg4(struct adapter *adap, int reg);
 u32 t4_get_util_window(struct adapter *adap);
 void t4_setup_memwin(struct adapter *adap, u32 memwin_base, u32 window);
 
-int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u64 *mem_off,
-		      u64 *mem_base, u64 *mem_aperture);
+int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u32 *mem_off,
+		      u32 *mem_base, u32 *mem_aperture);
 void t4_memory_update_win(struct adapter *adap, int win, u32 addr);
-void t4_memory_rw_residual(struct adapter *adap, u64 off, u64 addr, u8 *buf,
+void t4_memory_rw_residual(struct adapter *adap, u32 off, u32 addr, u8 *buf,
 			   int dir);
 #define T4_MEMORY_WRITE	0
 #define T4_MEMORY_READ	1
-int t4_memory_rw(struct adapter *adap, int win, int mtype, u64 addr, u64 len,
+int t4_memory_rw(struct adapter *adap, int win, int mtype, u32 addr, u32 len,
 		 void *buf, int dir);
 static inline int t4_memory_write(struct adapter *adap, int mtype, u32 addr,
 				  u32 len, __be32 *buf)

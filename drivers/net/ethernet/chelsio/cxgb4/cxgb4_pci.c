@@ -160,7 +160,7 @@ out_free_mbox_log:
 
 void cxgb4_pci_chip_free(struct adapter *adap)
 {
-       if (!is_t4(adap->params.chip)){
+       if (!is_t4(adap->params.chip)) {
                if (adap->bar2)
                        iounmap(adap->bar2);
        }

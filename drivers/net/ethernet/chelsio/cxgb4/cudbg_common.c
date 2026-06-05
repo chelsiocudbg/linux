@@ -30,7 +30,7 @@ int get_scratch_buff(struct cudbg_buffer *pdbg_buff, u32 size,
 
         scratch_offset = pdbg_buff->size - size;
         if (pdbg_buff->offset > (int)scratch_offset || pdbg_buff->size < size) {
-                rc = CUDBG_STATUS_NO_SCRATCH_MEM;
+                rc = CUDBG_STATUS_NO_MEM;
                 goto err;
         } else {
                 pscratch_buff->data = (char *)pdbg_buff->data + scratch_offset;

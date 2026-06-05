@@ -201,11 +201,9 @@ struct rsp_ctrl {
 /*
  * Flash layout.
  */
-// __SS__ commenting for now
 #define FLASH_START(start)	((start) * SF_SEC_SIZE)
 #define FLASH_MAX_SIZE(nsecs)	((nsecs) * SF_SEC_SIZE)
 
-//BEGIN------------- Keep old enum values unchanged for compatibility with ULDs -------------BEGIN
 enum {
     FLASH_FW_START_SEC = 8,
     FLASH_FW_NSECS = 16,
@@ -219,7 +217,6 @@ enum {
 
     FLASH_MIN_SIZE = FLASH_CFG_START + FLASH_CFG_MAX_SIZE,
 };
-//END------------- Keep old enum values unchanged for compatibility with ULDs -------------BEGIN
 
 enum t4_flash_loc {
 	/*

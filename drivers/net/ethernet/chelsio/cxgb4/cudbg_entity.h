@@ -6,12 +6,6 @@
 #ifndef __CUDBG_ENTITY_H__
 #define __CUDBG_ENTITY_H__
 
-#ifdef __GNUC__
-#define ATTRIBUTE_UNUSED __attribute__ ((unused))
-#else
-#define ATTRIBUTE_UNUSED
-#endif
-
 #define EDC0_FLAG 0
 #define EDC1_FLAG 1
 #define MC_FLAG 2
@@ -29,7 +23,7 @@ struct cudbg_mbox_log {
 
 #define CUDBG_CIM_IBQ_REV 1
 
-struct struct_cim_ibq_rev1 {
+struct cim_ibq_rev1 {
        struct cudbg_ver_hdr ver_hdr;
        u8 qid;
        u8 coreid;
@@ -38,7 +32,7 @@ struct struct_cim_ibq_rev1 {
 
 #define CUDBG_CIM_OBQ_REV 1
 
-struct struct_cim_obq_rev1 {
+struct cim_obq_rev1 {
        struct cudbg_ver_hdr ver_hdr;
        u8 qid;
        u8 coreid;
@@ -52,7 +46,7 @@ enum cudbg_entity_cim_qcfg_qtype {
        CUDBG_ENTITY_CIM_QCFG_QTYPE_OBQ,
 };
 
-struct struct_cim_qcfg_rev1_data {
+struct cim_qcfg_rev1_data {
        u8 qtype;
        u8 qid;
        u16 base;
@@ -62,12 +56,12 @@ struct struct_cim_qcfg_rev1_data {
        u32 stat[4];
 };
 
-struct struct_cim_qcfg_rev1 {
+struct cim_qcfg_rev1 {
        struct cudbg_ver_hdr ver_hdr;
        u8 num_cim_ibq;
        u8 num_cim_obq;
        u8 coreid;
-       struct struct_cim_qcfg_rev1_data data[]; /* Must be last */
+       struct cim_qcfg_rev1_data data[]; /* Must be last */
 };
 
 #define CUDBG_CIM_LA_REV 1
