@@ -2488,7 +2488,6 @@ static void process_db_full(struct work_struct *work)
 	drain_db_fifo(adap, dbfifo_drain_delay);
 	enable_dbs(adap);
 	notify_rdma_uld(adap, CXGB4_CONTROL_DB_EMPTY);
-	adap->db_stats.db_empty++;
 	if (CHELSIO_CHIP_VERSION(adap->params.chip) <= CHELSIO_T5)
 		t4_set_reg_field(adap, SGE_INT_ENABLE3_A,
 				 DBFIFO_HP_INT_F | DBFIFO_LP_INT_F,
@@ -2899,8 +2898,8 @@ static int cxgb_close(struct net_device *dev)
 }
 
 int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
-			       __be32 sip, __be16 sport, __be16 vlan,
-			       unsigned int queue, unsigned char port, unsigned char mask)
+		__be32 sip, __be16 sport, __be16 vlan,
+		unsigned int queue, unsigned char port, unsigned char mask)
 {
 	int ret;
 	struct filter_entry *f;
@@ -2915,7 +2914,7 @@ int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
 	stid += adap->tids.nftids;
 
 	/* Check to make sure the filter requested is writable ...
-	*/
+	 */
 	f = &adap->tids.ftid_tab[stid];
 	ret = writable_filter(f);
 	if (ret)
@@ -2969,7 +2968,7 @@ int cxgb4_create_server_filter(const struct net_device *dev, unsigned int stid,
 EXPORT_SYMBOL(cxgb4_create_server_filter);
 
 int cxgb4_remove_server_filter(const struct net_device *dev, unsigned int stid,
-			       unsigned int queue, bool ipv6)
+		unsigned int queue, bool ipv6)
 {
 	struct filter_entry *f;
 	struct adapter *adap;
@@ -3442,9 +3441,9 @@ static int cxgb4_mgmt_set_vf_link_state(struct net_device *dev, int vf,
 
 static int cxgb_set_mac_addr(struct net_device *dev, void *p)
 {
-	struct port_info *pi = netdev_priv(dev);
-	struct sockaddr *addr = p;
 	int ret;
+	struct sockaddr *addr = p;
+	struct port_info *pi = netdev_priv(dev);
 
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
@@ -3465,14 +3464,13 @@ static void cxgb_netpoll(struct net_device *dev)
 	struct adapter *adap = pi->adapter;
 
 	if (adap->flags & CXGB4_USING_MSIX) {
-		struct sge_eth_rxq *rx = &adap->sge.ethrxq[pi->first_qset];
 		int i;
+		struct sge_eth_rxq *rx = &adap->sge.ethrxq[pi->first_qset];
 
 		for (i = pi->nqsets; i; i--, rx++)
 			t4_sge_intr_msix(0, &rx->rspq);
-	} else {
+	} else
 		t4_intr_handler(adap)(0, adap);
-	}
 }
 #endif
 
@@ -5014,17 +5012,14 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 	adap->tids.nftids = val[4] - val[3] + 1;
 	adap->sge.ingr_start = val[5];
 
-	/* T6 TCAM can contain about 4 regions
-	 * (Hi-Priority filter, Active, Server and
-	 * Normal priority filter regions).
-	 */
-	if (chip_ver > CHELSIO_T5) {
+	if (CHELSIO_CHIP_VERSION(adap->params.chip) > CHELSIO_T5) {
 		params[0] = FW_PARAM_PFVF(HPFILTER_START);
 		params[1] = FW_PARAM_PFVF(HPFILTER_END);
 		ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 2,
 				      params, val);
 		if (ret < 0)
 			goto bye;
+
 		adap->tids.hpftid_base = val[0];
 		adap->tids.nhpftids = val[1] - val[0] + 1;
 
@@ -5063,8 +5058,7 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 		goto bye;
 	}
 
-	adap->sge.txq_maperr = kcalloc(BITS_TO_LONGS(adap->sge.egr_sz),
-				       sizeof(long), GFP_KERNEL);
+	adap->sge.txq_maperr = bitmap_zalloc(adap->sge.egr_sz, GFP_KERNEL);
 	if (!adap->sge.txq_maperr) {
 		ret = -ENOMEM;
 		goto bye;
@@ -5438,7 +5432,6 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 	 */
 bye:
 	adap_free_hma_mem(adap);
-
 	kfree(adap->sge.egr_map);
 	kfree(adap->sge.ingr_map);
 	bitmap_free(adap->sge.starving_fl);

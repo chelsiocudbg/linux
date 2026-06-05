@@ -4993,9 +4993,9 @@ void t4_free_sge_resources(struct adapter *adap)
 		}
 	}
 
-	/* destroy the reverse egress queue map */
-	kfree(adap->sge.egr_map);
-	kfree(adap->sge.txq_maperr);
+	/* clear the reverse egress queue map */
+	memset(adap->sge.egr_map, 0,
+	       adap->sge.egr_sz * sizeof(*adap->sge.egr_map));
 }
 
 void t4_sge_start(struct adapter *adap)
