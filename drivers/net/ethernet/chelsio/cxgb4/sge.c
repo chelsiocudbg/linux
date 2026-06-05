@@ -986,6 +986,8 @@ done:
 }
 EXPORT_SYMBOL(cxgb4_write_partial_sgl);
 
+#if defined(ARCH_HAS_IOREMAP_WC)
+
 /* This function copies 64 byte coalesced work request to
  * memory mapped BAR2 space. For coalesced WR SGE fetches
  * data from the FIFO instead of from Host.
@@ -1001,6 +1003,7 @@ static void cxgb_pio_copy(u64 __iomem *dst, u64 *src)
 		count--;
 	}
 }
+#endif
 
 /**
  *	cxgb4_ring_tx_db - check and potentially ring a Tx queue's doorbell
@@ -1046,6 +1049,12 @@ inline void cxgb4_ring_tx_db(struct adapter *adap, struct sge_txq *q, int n)
 		 */
 		WARN_ON(val & DBPRIO_F);
 
+#if !defined(ARCH_HAS_IOREMAP_WC)
+		wmb();
+		writel(val | QID_V(q->bar2_qid),
+		       q->bar2_addr + SGE_UDB_KDOORBELL);
+		wmb();
+#else
 		/* If we're only writing a single TX Descriptor and we can use
 		 * Inferred QID registers, we can use the Write Combining
 		 * Gather Buffer; otherwise we use the simple doorbell.
@@ -1075,6 +1084,7 @@ inline void cxgb4_ring_tx_db(struct adapter *adap, struct sge_txq *q, int n)
 		 * hardware DMA read the actual Work Request.
 		 */
 		wmb();
+#endif
 	}
 }
 EXPORT_SYMBOL(cxgb4_ring_tx_db);
