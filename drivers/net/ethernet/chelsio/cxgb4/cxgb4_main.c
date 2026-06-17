@@ -6215,7 +6215,7 @@ static void cxgb4_mgmt_setup(struct net_device *dev)
 	dev->ethtool_ops = &cxgb4_mgmt_ethtool_ops;
 }
 
-static int cxgb4_iov_configure(struct pci_dev *pdev, int num_vfs)
+int cxgb4_iov_configure(struct pci_dev *pdev, int num_vfs)
 {
 	struct adapter *adap = pci_get_drvdata(pdev);
 	int err = 0;

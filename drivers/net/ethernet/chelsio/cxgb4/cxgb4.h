@@ -2072,6 +2072,19 @@ int t4_free_mac_filt(struct adapter *adap, unsigned int mbox,
 		     const u8 **addr, bool sleep_ok);
 int t4_change_mac(struct adapter *adap, unsigned int mbox, unsigned int viid,
 		  int idx, const u8 *addr, bool persist, u8 *smt_idx);
+int cxgb4_is_primary_pf(struct adapter *adapter);
+int cxgb4_mbox_log_init(struct adapter *adap);
+
+pci_ers_result_t cxgb4_pci_eeh_err_detected(struct pci_dev *pdev,
+					    pci_channel_state_t state);
+pci_ers_result_t cxgb4_pci_eeh_slot_reset(struct pci_dev *pdev);
+void cxgb4_pci_eeh_resume(struct pci_dev *pdev);
+void cxgb4_pci_eeh_reset_prepare(struct pci_dev *pdev);
+void cxgb4_pci_eeh_reset_done(struct pci_dev *pdev);
+int cxgb4_iov_configure(struct pci_dev *pdev, int num_vfs);
+int cxgb4_adap_probe(struct adapter *adapter);
+void cxgb4_adap_remove(struct adapter *adapter);
+void cxgb4_adap_shutdown(struct adapter *adapter);
 int t4_set_addr_hash(struct adapter *adap, unsigned int mbox, unsigned int viid,
 		     bool ucast, u64 vec, bool sleep_ok);
 int t4_enable_vi_params(struct adapter *adap, unsigned int mbox,
