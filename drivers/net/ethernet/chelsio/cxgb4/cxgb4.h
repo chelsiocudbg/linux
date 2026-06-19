@@ -455,7 +455,6 @@ struct adapter_params {
 	struct vpd_params vpd;
 	struct pf_resources pfres;
 	struct pci_params pci;
-	struct devlog_params devlogs;
 	struct devlog_params devlog[MAX_UP_CORES];
 	enum pcie_memwin drv_memwin;
 
@@ -1957,12 +1956,8 @@ u8 t4_cim_num_ibq(struct adapter *adap);
 u8 t4_cim_num_obq(struct adapter *adap);
 void t4_read_cimq_cfg_core(struct adapter *adap, u8 coreid, u16 *base,
 			   u16 *size, u16 *thres);
-int t4_read_cim_ibq(struct adapter *adap, unsigned int qid, u32 *data,
-		    size_t n);
 int t4_read_cim_obq_core(struct adapter *adap, u8 coreid, u32 qid, u32 *data,
 			 size_t n);
-int t4_read_cim_obq(struct adapter *adap, unsigned int qid, u32 *data,
-		    size_t n);
 int t4_cim_read_core(struct adapter *adap, u8 group, u8 coreid,
 		     unsigned int addr, unsigned int n, unsigned int *valp);
 int t4_cim_read(struct adapter *adap, unsigned int addr, unsigned int n,
@@ -1970,11 +1965,8 @@ int t4_cim_read(struct adapter *adap, unsigned int addr, unsigned int n,
 int t4_cim_write_core(struct adapter *adap, u8 group, u8 coreid,
 		      unsigned int addr, unsigned int n,
 		      const unsigned int *valp);
-int t4_cim_write(struct adapter *adap, unsigned int addr, unsigned int n,
-		 const unsigned int *valp);
 int t4_cim_read_la_core(struct adapter *adap, u8 coreid, u32 *la_buf,
 			u32 *wrptr);
-int t4_cim_read_la(struct adapter *adap, u32 *la_buf, unsigned int *wrptr);
 void t4_cim_read_pif_la(struct adapter *adap, u32 *pif_req, u32 *pif_rsp,
 			unsigned int *pif_req_wrptr,
 			unsigned int *pif_rsp_wrptr);

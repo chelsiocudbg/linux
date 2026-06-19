@@ -6521,7 +6521,7 @@ static bool ulprx_intr_handler(struct adapter *adap, int arg, bool verbose)
 	if (CHELSIO_CHIP_VERSION(adap->params.chip) <= CHELSIO_T5)
 		ulprx_intr_info.details = ulprx_intr_details;
 	else if (CHELSIO_CHIP_VERSION(adap->params.chip) <= CHELSIO_T6)
-		ulprx_intr_info.details =  t6_ulprx_int_cause_details;
+		ulprx_intr_info.details = t6_ulprx_int_cause_details;
 	else
 		ulprx_intr_info.details = t7_ulprx_int_cause_details;
 
@@ -14239,22 +14239,6 @@ int t4_read_cim_ibq_core(struct adapter *adap, u8 coreid, u32 qid, u32 *data,
 	return i;
 }
 
-/*
- *	t4_read_cim_ibq - read the contents of a CIM inbound queue
- *	@adap: the adapter
- *	@qid: the queue index
- *	@data: where to store the queue contents
- *	@n: capacity of @data in 32-bit words
- *
- *	Reads the contents of the selected CIM queue starting at address 0 up
- *	to the capacity of @data.  @n must be a multiple of 4.  Returns < 0 on
- *	error and the number of 32-bit words actually read on success.
- */
-int t4_read_cim_ibq(struct adapter *adap, unsigned int qid, u32 *data, size_t n)
-{
-	return t4_read_cim_ibq_core(adap, 0, qid, data, n);
-}
-
 static int t4_read_cim_obq_data_core(struct adapter *adap, u8 coreid, u32 addr,
 				     u32 *data)
 {
@@ -14312,22 +14296,6 @@ int t4_read_cim_obq_core(struct adapter *adap, u8 coreid, u32 qid, u32 *data,
 
 	t4_write_reg(adap, CIM_OBQ_DBG_CFG_A, 0);
 	return i;
-}
-
-/*
- * t4_read_cim_obq - read the contents of a CIM outbound queue
- * @adap: the adapter
- * @qid: the queue index
- * @data: where to store the queue contents
- * @n: capacity of @data in 32-bit words
- *
- * Reads the contents of the selected CIM queue starting at address 0 up
- * to the capacity of @data.  @n must be a multiple of 4.  Returns < 0 on
- * error and the number of 32-bit words actually read on success.
- */
-int t4_read_cim_obq(struct adapter *adap, unsigned int qid, u32 *data, size_t n)
-{
-	return t4_read_cim_obq_core(adap, 0, qid, data, n);
 }
 
 /**
@@ -14428,21 +14396,6 @@ int t4_cim_write_core(struct adapter *adap, u8 group, u8 coreid,
 }
 
 /**
- *	t4_cim_write - write a block into CIM internal address space
- *	@adap: the adapter
- *	@addr: the start address within the CIM address space
- *	@n: number of words to write
- *	@valp: set of values to write
- *
- *	Writes a block of 4-byte words into the CIM intenal address space.
- */
-int t4_cim_write(struct adapter *adap, unsigned int addr, unsigned int n,
-		 const unsigned int *valp)
-{
-	return t4_cim_write_core(adap, 0, 0, addr, n, valp);
-}
-
-/**
  *	t4_cim_read_la_core - read CIM LA capture buffer on specific core
  *	@adap: the adapter
  *	@coreid: uP coreid
@@ -14522,21 +14475,6 @@ restart:
 	}
 
 	return ret;
-}
-
-/**
- *	t4_cim_read_la - read CIM LA capture buffer
- *	@adap: the adapter
- *	@la_buf: where to store the LA data
- *	@wrptr: the HW write pointer within the capture buffer
- *
- *	Reads the contents of the CIM LA buffer with the most recent entry at
- *	the end	of the returned data and with the entry at @wrptr first.
- *	We try to leave the LA in the running state we find it in.
- */
-int t4_cim_read_la(struct adapter *adap, u32 *la_buf, unsigned int *wrptr)
-{
-	return t4_cim_read_la_core(adap, 0, la_buf, wrptr);
 }
 
 /**
