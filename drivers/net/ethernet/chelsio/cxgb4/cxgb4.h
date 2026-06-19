@@ -70,6 +70,8 @@ enum dev_state {
 
 #include "cxgb4_uld.h"
 #include "t4fw_api.h"
+#include "t4_values.h"
+#include "cxgb4_pci.h"
 
 #define CH_WARN(adap, fmt, ...) dev_warn(adap->pdev_dev, fmt, ## __VA_ARGS__)
 extern struct list_head adapter_list;
@@ -1641,6 +1643,9 @@ extern char cxgb4_driver_name[];
 void t4_os_portmod_changed(struct adapter *adap, int port_id);
 void t4_os_link_changed(struct adapter *adap, int port_id, int link_stat);
 
+void cxgb4_work_queue(struct workqueue_struct *workq, struct work_struct *work);
+void cxgb4_work_cancel(struct workqueue_struct *workq, struct work_struct *work);
+struct net_device *cxgb4_port_chan_to_netdev(struct adapter *adap, u8 chan);
 void t4_free_sge_resources(struct adapter *adap);
 irq_handler_t t4_intr_handler(struct adapter *adap);
 netdev_tx_t t4_start_xmit(struct sk_buff *skb, struct net_device *dev);
@@ -1655,10 +1660,10 @@ int t4_sge_alloc_rxq(struct adapter *adap, struct sge_rspq *iq, bool fwevtq,
 		     rspq_flush_handler_t flush_handler, int cong);
 int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,
 			 struct net_device *dev, struct netdev_queue *netdevq,
-			 unsigned int iqid, u8 dbqt);
+			 unsigned int iqid, u8 dbqt, int index);
 int t4_sge_alloc_ctrl_txq(struct adapter *adap, struct sge_ctrl_txq *txq,
 			  struct net_device *dev, unsigned int iqid,
-			  unsigned int cmplqid);
+			  unsigned int cmplqid, int index);
 int t4_sge_mod_ctrl_txq(struct adapter *adap, unsigned int eqid,
 			unsigned int cmplqid);
 int t4_sge_alloc_uld_txq(struct adapter *adap, struct sge_uld_txq *txq,
