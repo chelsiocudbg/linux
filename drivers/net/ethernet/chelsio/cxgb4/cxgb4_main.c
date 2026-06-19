@@ -682,7 +682,7 @@ static irqreturn_t t4_nondata_intr(int irq, void *cookie)
 		t4_write_reg(adap, MYPF_REG(PL_PF_INT_CAUSE_A), v);
 	}
 	if (adap->flags & CXGB4_MASTER_PF)
-		t4_slow_intr_handler(adap);
+		t4_slow_intr_handler(adap, true);
 	return IRQ_HANDLED;
 }
 
@@ -6198,23 +6198,6 @@ static void free_some_resources(struct adapter *adapter)
 #define VLAN_FEAT (NETIF_F_SG | NETIF_F_IP_CSUM | TSO_FLAGS | \
 		   NETIF_F_GRO | NETIF_F_IPV6_CSUM | NETIF_F_HIGHDMA)
 #define SEGMENT_SIZE 128
-
-static int t4_get_chip_type(struct adapter *adap, int ver)
-{
-	u32 pl_rev = REV_G(t4_read_reg(adap, PL_REV_A));
-
-	switch (ver) {
-	case CHELSIO_T4:
-		return CHELSIO_CHIP_CODE(CHELSIO_T4, pl_rev);
-	case CHELSIO_T5:
-		return CHELSIO_CHIP_CODE(CHELSIO_T5, pl_rev);
-	case CHELSIO_T6:
-		return CHELSIO_CHIP_CODE(CHELSIO_T6, pl_rev);
-	default:
-		break;
-	}
-	return -EINVAL;
-}
 
 #ifdef CONFIG_PCI_IOV
 static void cxgb4_mgmt_setup(struct net_device *dev)
