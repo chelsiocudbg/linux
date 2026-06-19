@@ -458,7 +458,6 @@ struct adapter_params {
 	struct vpd_params vpd;
 	struct pf_resources pfres;
 	struct pci_params pci;
-	struct devlog_params devlogs;
 	struct devlog_params devlog[MAX_UP_CORES];
 	enum pcie_memwin drv_memwin;
 

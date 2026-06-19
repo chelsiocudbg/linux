@@ -6990,7 +6990,7 @@ fw_attach_fail:
 		const char *dir_name = pci_name(adapter->pdev);
 
 		adapter->debugfs_root = debugfs_create_dir(dir_name, cxgb4_debugfs_root);
-		t4_setup_debugfs(adapter);
+		cxgb4_setup_debugfs(adapter);
 	}
 
 	if (is_uld(adapter))
