@@ -1862,7 +1862,6 @@ void t4_setup_memwin(struct adapter *adap, u32 memwin_base, u32 window);
 
 int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u32 *mem_off,
 		      u32 *mem_base, u32 *mem_aperture);
-void t4_memory_update_win(struct adapter *adap, int win, u32 addr);
 void t4_memory_rw_residual(struct adapter *adap, u32 off, u32 addr, u8 *buf,
 			   int dir);
 #define T4_MEMORY_WRITE	0

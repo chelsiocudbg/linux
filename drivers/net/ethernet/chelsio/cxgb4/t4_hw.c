@@ -573,26 +573,6 @@ int t4_memory_rw_init(struct adapter *adap, int win, int mtype, u32 *mem_off,
 }
 
 /**
- * t4_memory_update_win - Move memory window to specified address.
- * @adap: the adapter
- * @win: PCI-E Memory Window to use
- * @addr: location to move.
- *
- * Move memory window to specified address.
- */
-void t4_memory_update_win(struct adapter *adap, int win, u32 addr)
-{
-	t4_write_reg(adap,
-		     PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_OFFSET_A, win),
-		     addr);
-	/* Read it back to ensure that changes propagate before we
-	 * attempt to use the new value.
-	 */
-	t4_read_reg(adap,
-		    PCIE_MEM_ACCESS_REG(PCIE_MEM_ACCESS_OFFSET_A, win));
-}
-
-/**
  * t4_memory_rw_residual - Read/Write residual data.
  * @adap: the adapter
  * @off: relative offset within residual to start read/write.
