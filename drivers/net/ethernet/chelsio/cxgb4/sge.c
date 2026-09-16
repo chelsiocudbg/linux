@@ -1697,7 +1697,7 @@ static netdev_tx_t cxgb4_eth_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif /* CONFIG_CHELSIO_T4_FCOE */
 	}
 
-	ctrl0 = TXPKT_OPCODE_V(CPL_TX_PKT_XT) | TXPKT_INTF_V(pi->tx_chan) |
+	ctrl0 = TXPKT_OPCODE_V(CPL_TX_PKT_XT) | TXPKT_INTF_V(pi->lport) |
 		TXPKT_PF_V(adap->pf);
 	if (ptp_enabled)
 		ctrl0 |= TXPKT_TSTAMP_F;
@@ -2003,7 +2003,7 @@ static netdev_tx_t cxgb4_vf_eth_xmit(struct sk_buff *skb,
 
 	 /* Fill in the TX Packet CPL message header. */
 	cpl->ctrl0 = cpu_to_be32(TXPKT_OPCODE_V(CPL_TX_PKT_XT) |
-				 TXPKT_INTF_V(pi->port_id) |
+				 TXPKT_INTF_V(pi->lport) |
 				 TXPKT_PF_V(0));
 	cpl->pack = cpu_to_be16(0);
 	cpl->len = cpu_to_be16(skb->len);
@@ -4400,7 +4400,7 @@ int t4_sge_alloc_rxq(struct adapter *adap, struct sge_rspq *iq, bool fwevtq,
 		FW_IQ_CMD_IQANUD_V(UPDATEDELIVERY_INTERRUPT_X) |
 		FW_IQ_CMD_IQANDSTINDEX_V(intr_idx >= 0 ? intr_idx :
 							-intr_idx - 1));
-	c.iqdroprss_to_iqesize = htons(FW_IQ_CMD_IQPCIECH_V(pi->tx_chan) |
+	c.iqdroprss_to_iqesize = htons(FW_IQ_CMD_IQPCIECH_V(cxgb4_port_chan(dev)) |
 		FW_IQ_CMD_IQGTSMODE_F |
 		FW_IQ_CMD_IQINTCNTTHRESH_V(iq->pktcnt_idx) |
 		FW_IQ_CMD_IQESIZE_V(ilog2(iq->iqe_len) - 4));
@@ -4527,13 +4527,21 @@ int t4_sge_alloc_rxq(struct adapter *adap, struct sge_rspq *iq, bool fwevtq,
 		if (cong == 0) {
 			val = CONMCTXT_CNGTPMODE_V(CONMCTXT_CNGTPMODE_QUEUE_X);
 		} else {
-			val =
-			    CONMCTXT_CNGTPMODE_V(CONMCTXT_CNGTPMODE_CHANNEL_X);
-			for (i = 0; i < 4; i++) {
-				if (cong & (1 << i))
-					ch_map |= 1 << (i << cng_ch_bits_log);
+			if (CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T7) {
+				/*
+				 * For T7+, firmware calculates the congestion channel
+				 * map internally based on configured LB_MODE.
+				 */
+				val = T7_DMAQ_CONM_CTXT_CH_VEC_V(cong);
+			} else {
+				val =
+				    CONMCTXT_CNGTPMODE_V(CONMCTXT_CNGTPMODE_CHANNEL_X);
+				for (i = 0; i < 4; i++) {
+					if (cong & (1 << i))
+						ch_map |= 1 << (i << cng_ch_bits_log);
+				}
+				val |= CONMCTXT_CNGCHMAP_V(ch_map);
 			}
-			val |= CONMCTXT_CNGCHMAP_V(ch_map);
 		}
 		ret = t4_set_params(adap, adap->mbox, adap->pf, 0, 1,
 				    &param, &val);
@@ -4587,13 +4595,16 @@ static void init_txq(struct adapter *adap, struct sge_txq *q, unsigned int id)
  */
 int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,
 			 struct net_device *dev, struct netdev_queue *netdevq,
-			 unsigned int iqid, u8 dbqt)
+			 unsigned int iqid, u8 dbqt, int index)
 {
 	unsigned int chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
 	struct port_info *pi = netdev_priv(dev);
 	struct sge *s = &adap->sge;
 	struct fw_eq_eth_cmd c;
 	int ret, nentries;
+
+	if (adap->params.num_up_cores > 1)
+		txq->group_id = index % adap->params.num_up_cores;
 
 	/* Add status entries */
 	nentries = txq->q.size + s->stat_len / sizeof(struct tx_desc);
@@ -4611,7 +4622,9 @@ int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,
 			    FW_EQ_ETH_CMD_PFN_V(adap->pf) |
 			    FW_EQ_ETH_CMD_VFN_V(0));
 	c.alloc_to_len16 = htonl(FW_EQ_ETH_CMD_ALLOC_F |
-				 FW_EQ_ETH_CMD_EQSTART_F | FW_LEN16(c));
+				 FW_EQ_ETH_CMD_EQSTART_F |
+				 FW_EQ_ETH_CMD_COREGROUP_V(txq->group_id) |
+				 (sizeof(c) / 16));
 
 	/* For TX Ethernet Queues using the SGE Doorbell Queue Timer
 	 * mechanism, we use Ingress Queue messages for Hardware Consumer
@@ -4628,7 +4641,7 @@ int t4_sge_alloc_eth_txq(struct adapter *adap, struct sge_eth_txq *txq,
 		htonl(FW_EQ_ETH_CMD_HOSTFCMODE_V((chip_ver <= CHELSIO_T5) ?
 						 HOSTFCMODE_INGRESS_QUEUE_X :
 						 HOSTFCMODE_STATUS_PAGE_X) |
-		      FW_EQ_ETH_CMD_PCIECHN_V(pi->tx_chan) |
+		      FW_EQ_ETH_CMD_PCIECHN_V(cxgb4_port_chan(dev)) |
 		      FW_EQ_ETH_CMD_FETCHRO_F | FW_EQ_ETH_CMD_IQID_V(iqid));
 
 	/* Note that the CIDX Flush Threshold should match MAX_TX_RECLAIM. */
@@ -4681,13 +4694,17 @@ out_free_txq:
 
 int t4_sge_alloc_ctrl_txq(struct adapter *adap, struct sge_ctrl_txq *txq,
 			  struct net_device *dev, unsigned int iqid,
-			  unsigned int cmplqid)
+			  unsigned int cmplqid, int index)
 {
 	unsigned int chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
-	struct port_info *pi = netdev_priv(dev);
 	struct sge *s = &adap->sge;
 	struct fw_eq_ctrl_cmd c;
-	int ret, nentries;
+	int ret, nentries, ngroups;
+
+	ngroups = (adap->params.tid_qid_sel_mask >>
+			adap->params.tid_qid_sel_shift) + 1;
+	if (adap->params.tid_qid_sel_mask)
+		txq->tid_qid_group_id = index % ngroups;
 
 	/* Add status entries */
 	nentries = txq->q.size + s->stat_len / sizeof(struct tx_desc);
@@ -4703,12 +4720,14 @@ int t4_sge_alloc_ctrl_txq(struct adapter *adap, struct sge_ctrl_txq *txq,
 			    FW_EQ_CTRL_CMD_PFN_V(adap->pf) |
 			    FW_EQ_CTRL_CMD_VFN_V(0));
 	c.alloc_to_len16 = htonl(FW_EQ_CTRL_CMD_ALLOC_F |
-				 FW_EQ_CTRL_CMD_EQSTART_F | FW_LEN16(c));
+				 FW_EQ_CTRL_CMD_EQSTART_F |
+				 FW_EQ_CTRL_CMD_COREGROUP_V(txq->tid_qid_group_id) |
+				 (sizeof(c) / 16));
 	c.cmpliqid_eqid = htonl(FW_EQ_CTRL_CMD_CMPLIQID_V(cmplqid));
 	c.physeqid_pkd = htonl(0);
 	c.fetchszm_to_iqid =
 		htonl(FW_EQ_CTRL_CMD_HOSTFCMODE_V(HOSTFCMODE_STATUS_PAGE_X) |
-		      FW_EQ_CTRL_CMD_PCIECHN_V(pi->tx_chan) |
+		      FW_EQ_CTRL_CMD_PCIECHN_V(cxgb4_port_chan(dev)) |
 		      FW_EQ_CTRL_CMD_FETCHRO_F | FW_EQ_CTRL_CMD_IQID_V(iqid));
 	c.dcaen_to_eqsize =
 		htonl(FW_EQ_CTRL_CMD_FBMIN_V(chip_ver <= CHELSIO_T5
@@ -5196,6 +5215,7 @@ int t4_sge_init(struct adapter *adap)
 		egress_threshold = EGRTHRESHOLDPACKING_G(sge_conm_ctrl);
 		break;
 	case CHELSIO_T6:
+	case CHELSIO_T7:
 		egress_threshold = T6_EGRTHRESHOLDPACKING_G(sge_conm_ctrl);
 		break;
 	default:
