@@ -682,7 +682,7 @@ static irqreturn_t t4_nondata_intr(int irq, void *cookie)
 		t4_write_reg(adap, MYPF_REG(PL_PF_INT_CAUSE_A), v);
 	}
 	if (adap->flags & CXGB4_MASTER_PF)
-		t4_slow_intr_handler(adap);
+		t4_slow_intr_handler(adap, true);
 	return IRQ_HANDLED;
 }
 
