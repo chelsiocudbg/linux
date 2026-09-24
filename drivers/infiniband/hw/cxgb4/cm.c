@@ -673,7 +673,11 @@ static void read_tcb(struct c4iw_ep *ep)
 	memset(req, 0, wrlen);
 	INIT_TP_WR(req, ep->hwtid);
 	OPCODE_TID(req) = cpu_to_be32(MK_OPCODE_TID(CPL_GET_TCB, ep->hwtid));
-	req->reply_ctrl = htons(REPLY_CHAN_V(0) | QUEUENO_V(ep->rss_qid));
+	if (CHELSIO_CHIP_VERSION(ep->com.dev->rdev.lldi.adapter_type) >= CHELSIO_T7)
+		req->reply_ctrl = htons(T7_REPLY_CHAN_V(0) |
+				        T7_QUEUENO_V(ep->rss_qid));
+	else
+		req->reply_ctrl = htons(REPLY_CHAN_V(0) | QUEUENO_V(ep->rss_qid));
 
 	/*
 	 * keep a ref on the ep so the tcb is not unlocked before this
@@ -716,8 +720,10 @@ static int send_connect(struct c4iw_ep *ep)
 	struct cpl_t5_act_open_req *t5req = NULL;
 	struct cpl_t6_act_open_req *t6req = NULL;
 	struct cpl_act_open_req6 *req6 = NULL;
+	struct cpl_t7_act_open_req *t7req = NULL;
 	struct cpl_t5_act_open_req6 *t5req6 = NULL;
 	struct cpl_t6_act_open_req6 *t6req6 = NULL;
+	struct cpl_t7_act_open_req6 *t7req6 = NULL;
 	struct sk_buff *skb;
 	u64 opt0;
 	u32 opt2;
@@ -752,6 +758,10 @@ static int send_connect(struct c4iw_ep *ep)
 	case CHELSIO_T6:
 		sizev4 = sizeof(struct cpl_t6_act_open_req);
 		sizev6 = sizeof(struct cpl_t6_act_open_req6);
+		break;
+	case CHELSIO_T7:
+		sizev4 = sizeof(struct cpl_t7_act_open_req);
+		sizev6 = sizeof(struct cpl_t7_act_open_req6);
 		break;
 	default:
 		pr_err("T%d Chip is not supported\n",
@@ -839,6 +849,13 @@ static int send_connect(struct c4iw_ep *ep)
 			req = (struct cpl_act_open_req *)t6req;
 			t5req = (struct cpl_t5_act_open_req *)t6req;
 			break;
+		case CHELSIO_T7:
+			t7req = __skb_put(skb, wrlen);
+			INIT_TP_WR(t7req, 0);
+			req = (struct cpl_act_open_req *)t7req;
+			t5req = (struct cpl_t5_act_open_req *)t7req;
+			t6req = (struct cpl_t6_act_open_req *)t7req;
+			break;
 		default:
 			pr_err("T%d Chip is not supported\n",
 			       CHELSIO_CHIP_VERSION(adapter_type));
@@ -864,13 +881,20 @@ static int send_connect(struct c4iw_ep *ep)
 				t5req->rsvd = cpu_to_be32(isn);
 				pr_debug("snd_isn %u\n", t5req->rsvd);
 				t5req->opt2 = cpu_to_be32(opt2);
-			} else {
+			} else if (is_t6(ep->com.dev->rdev.lldi.adapter_type)) {
 				t6req->params =
-					  cpu_to_be64(FILTER_TUPLE_V(params));
+					t4_filter_tuple(ep->com.dev->rdev.lldi.adapter_type,
+							params);
 				t6req->rsvd = cpu_to_be32(isn);
 				pr_debug("snd_isn %u\n", t6req->rsvd);
 				t6req->opt2 = cpu_to_be32(opt2);
-			}
+			} else {
+                               t7req->params = cpu_to_be64(T7_FILTER_TUPLE_V(params));
+                               t7req->iss = cpu_to_be32(isn);
+                               t7req->opt2 = cpu_to_be32(opt2);
+                               t7req->rsvd2 = 0;
+                               t7req->opt3 = 0;
+			 }
 		}
 	} else {
 		switch (CHELSIO_CHIP_VERSION(adapter_type)) {
@@ -888,6 +912,13 @@ static int send_connect(struct c4iw_ep *ep)
 			INIT_TP_WR(t6req6, 0);
 			req6 = (struct cpl_act_open_req6 *)t6req6;
 			t5req6 = (struct cpl_t5_act_open_req6 *)t6req6;
+			break;
+		case CHELSIO_T7:
+			t7req6 = skb_put(skb, wrlen);
+			INIT_TP_WR(t7req6, 0);
+			req6 = (struct cpl_act_open_req6 *)t7req6;
+			t5req6 = (struct cpl_t5_act_open_req6 *)t7req6;
+			t6req6 = (struct cpl_t6_act_open_req6 *)t7req6;
 			break;
 		default:
 			pr_err("T%d Chip is not supported\n",
@@ -917,12 +948,19 @@ static int send_connect(struct c4iw_ep *ep)
 				t5req6->rsvd = cpu_to_be32(isn);
 				pr_debug("snd_isn %u\n", t5req6->rsvd);
 				t5req6->opt2 = cpu_to_be32(opt2);
-			} else {
+			} else if (is_t6(ep->com.dev->rdev.lldi.adapter_type)) {
 				t6req6->params =
-					    cpu_to_be64(FILTER_TUPLE_V(params));
+					t4_filter_tuple(ep->com.dev->rdev.lldi.adapter_type,
+							params);
 				t6req6->rsvd = cpu_to_be32(isn);
 				pr_debug("snd_isn %u\n", t6req6->rsvd);
 				t6req6->opt2 = cpu_to_be32(opt2);
+			} else {
+				   t7req6->params = cpu_to_be64(T7_FILTER_TUPLE_V(params));
+                               t7req6->iss = cpu_to_be32(isn);
+                               t7req6->opt2 = cpu_to_be32(opt2);
+                               t7req6->rsvd2 = 0;
+                               t7req6->opt3 = 0;
 			}
 
 		}
@@ -1211,6 +1249,20 @@ static int send_mpa_reply(struct c4iw_ep *ep, const void *pdata, u8 plen)
 	return c4iw_l2t_send(&ep->com.dev->rdev, skb, ep->l2t);
 }
 
+/*
+ * Once the hwtid of a connection is known, move its Tx and control queues
+ * to the uP core group owning the hwtid, as required on T7 adapters with
+ * multiple cores. This is a no-op on other adapters.
+ */
+static void set_ep_tid_queues(struct c4iw_ep *ep)
+{
+	struct net_device *dev = ep->com.dev->rdev.lldi.ports[0];
+
+	cxgb4_uld_tid_qid_sel_update(dev, CXGB4_ULD_RDMA, ep->hwtid,
+				     &ep->txq_idx);
+	cxgb4_uld_tid_ctrlq_id_sel_update(dev, ep->hwtid, &ep->ctrlq_idx);
+}
+
 static int act_establish(struct c4iw_dev *dev, struct sk_buff *skb)
 {
 	struct c4iw_ep *ep;
@@ -1235,6 +1287,7 @@ static int act_establish(struct c4iw_dev *dev, struct sk_buff *skb)
 	ep->hwtid = tid;
 	cxgb4_insert_tid(t, ep, tid, ep->com.local_addr.ss_family);
 	insert_ep_tid(ep);
+	set_ep_tid_queues(ep);
 
 	ep->snd_seq = be32_to_cpu(req->snd_isn);
 	ep->rcv_seq = be32_to_cpu(req->rcv_isn);
@@ -2074,10 +2127,11 @@ static int import_ep(struct c4iw_ep *ep, int iptype, __u8 *peer_ip,
 		     struct dst_entry *dst, struct c4iw_dev *cdev,
 		     bool clear_mpa_v1, enum chip_type adapter_type, u8 tos)
 {
+	struct net_device *pdev;
 	struct neighbour *n;
 	int err, step;
-	struct net_device *pdev;
 
+	pr_err("In import_ep\n");
 	n = dst_neigh_lookup(dst, peer_ip);
 	if (!n)
 		return -ENODEV;
@@ -2115,7 +2169,8 @@ static int import_ep(struct c4iw_ep *ep, int iptype, __u8 *peer_ip,
 		ep->txq_idx = cxgb4_port_idx(pdev) * step;
 		step = cdev->rdev.lldi.nrxq /
 			cdev->rdev.lldi.nchan;
-		ep->ctrlq_idx = cxgb4_port_idx(pdev);
+		ep->ctrlq_idx = cxgb4_port_idx(pdev) *
+				cdev->rdev.lldi.num_up_cores;
 		ep->rss_qid = cdev->rdev.lldi.rxq_ids[
 			cxgb4_port_idx(pdev) * step];
 		set_tcp_window(ep, (struct port_info *)netdev_priv(pdev));
@@ -2131,7 +2186,8 @@ static int import_ep(struct c4iw_ep *ep, int iptype, __u8 *peer_ip,
 		step = cdev->rdev.lldi.ntxq /
 			cdev->rdev.lldi.nchan;
 		ep->txq_idx = cxgb4_port_idx(pdev) * step;
-		ep->ctrlq_idx = cxgb4_port_idx(pdev);
+		ep->ctrlq_idx = cxgb4_port_idx(pdev) *
+				cdev->rdev.lldi.num_up_cores;
 		step = cdev->rdev.lldi.nrxq /
 			cdev->rdev.lldi.nchan;
 		ep->rss_qid = cdev->rdev.lldi.rxq_ids[
@@ -2167,6 +2223,7 @@ static int c4iw_reconnect(struct c4iw_ep *ep)
 	int iptype;
 	__u8 *ra;
 
+	pr_err("c4iw_reconnect\n");
 	pr_debug("qp %p cm_id %p\n", ep->com.qp, ep->com.cm_id);
 	c4iw_init_wr_wait(ep->com.wr_waitp);
 
@@ -2528,6 +2585,7 @@ static int pass_accept_req(struct c4iw_dev *dev, struct sk_buff *skb)
 	unsigned short hdrs;
 	u8 tos;
 
+	pr_err("pass_accept_req\n");
 	parent_ep = (struct c4iw_ep *)get_ep_from_stid(dev, stid);
 	if (!parent_ep) {
 		pr_err("%s connect request on invalid stid %d\n",
@@ -2652,6 +2710,7 @@ static int pass_accept_req(struct c4iw_dev *dev, struct sk_buff *skb)
 	cxgb4_insert_tid(t, child_ep, hwtid,
 			 child_ep->com.local_addr.ss_family);
 	insert_ep_tid(child_ep);
+	set_ep_tid_queues(child_ep);
 	if (accept_cr(child_ep, skb, req)) {
 		c4iw_put_ep(&parent_ep->com);
 		release_ep_resources(child_ep);
@@ -3310,6 +3369,7 @@ int c4iw_connect(struct iw_cm_id *cm_id, struct iw_cm_conn_param *conn_param)
 	__u8 *ra;
 	int iptype;
 
+	pr_err("c4iw_connect\n");
 	if ((conn_param->ord > cur_max_read_depth(dev)) ||
 	    (conn_param->ird > cur_max_read_depth(dev))) {
 		err = -EINVAL;

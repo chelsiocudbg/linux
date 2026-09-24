@@ -1551,6 +1551,7 @@ static int __init c4iw_init_module(void)
 		return -ENOMEM;
 	}
 
+	pr_err("In c4iw_init_module calling cxgb4_register_uld\n");
 	cxgb4_register_uld(CXGB4_ULD_RDMA, &c4iw_uld_info);
 
 	return 0;

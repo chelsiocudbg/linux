@@ -533,6 +533,7 @@ void c4iw_register_device(struct work_struct *work)
 	struct uld_ctx *ctx = container_of(work, struct uld_ctx, reg_work);
 	struct c4iw_dev *dev = ctx->dev;
 
+	pr_err("c4iw_register_device\n");
 	pr_debug("c4iw_dev %p\n", dev);
 	addrconf_addr_eui48((u8 *)&dev->ibdev.node_guid,
 			    dev->rdev.lldi.ports[0]->dev_addr);

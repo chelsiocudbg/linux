@@ -2749,7 +2749,7 @@ int c4iw_create_srq(struct ib_srq *ib_srq, struct ib_srq_init_attr *attrs,
 		goto err_free_skb;
 	attrs->attr.max_wr = rqsize - 1;
 
-	if (CHELSIO_CHIP_VERSION(rhp->rdev.lldi.adapter_type) > CHELSIO_T6)
+	if (CHELSIO_CHIP_VERSION(rhp->rdev.lldi.adapter_type) >= CHELSIO_T7)
 		srq->flags = T4_SRQ_LIMIT_SUPPORT;
 
 	if (udata) {
