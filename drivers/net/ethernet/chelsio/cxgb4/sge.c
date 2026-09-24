@@ -4778,7 +4778,8 @@ int t4_sge_mod_ctrl_txq(struct adapter *adap, unsigned int eqid,
 }
 
 static int t4_sge_alloc_ofld_txq(struct adapter *adap, struct sge_txq *q,
-				 struct net_device *dev, u32 cmd, u32 iqid)
+				 struct net_device *dev, u32 cmd, u32 iqid,
+				 u8 group)
 {
 	unsigned int chip_ver = CHELSIO_CHIP_VERSION(adap->params.chip);
 	struct port_info *pi = netdev_priv(dev);
@@ -4806,7 +4807,8 @@ static int t4_sge_alloc_ofld_txq(struct adapter *adap, struct sge_txq *q,
 			    FW_EQ_OFLD_CMD_PFN_V(adap->pf) |
 			    FW_EQ_OFLD_CMD_VFN_V(0));
 	c.alloc_to_len16 = htonl(FW_EQ_OFLD_CMD_ALLOC_F |
-				 FW_EQ_OFLD_CMD_EQSTART_F | FW_LEN16(c));
+				 FW_EQ_OFLD_CMD_EQSTART_F |
+				 FW_EQ_OFLD_CMD_COREGROUP_V(group) | FW_LEN16(c));
 	c.fetchszm_to_iqid =
 		htonl(FW_EQ_OFLD_CMD_HOSTFCMODE_V(HOSTFCMODE_STATUS_PAGE_X) |
 		      FW_EQ_OFLD_CMD_PCIECHN_V(pi->tx_chan) |
@@ -4835,7 +4837,7 @@ static int t4_sge_alloc_ofld_txq(struct adapter *adap, struct sge_txq *q,
 
 int t4_sge_alloc_uld_txq(struct adapter *adap, struct sge_uld_txq *txq,
 			 struct net_device *dev, unsigned int iqid,
-			 unsigned int uld_type)
+			 unsigned int uld_type, u8 group)
 {
 	u32 cmd = FW_EQ_OFLD_CMD;
 	int ret;
@@ -4843,7 +4845,7 @@ int t4_sge_alloc_uld_txq(struct adapter *adap, struct sge_uld_txq *txq,
 	if (unlikely(uld_type == CXGB4_TX_CRYPTO))
 		cmd = FW_EQ_CTRL_CMD;
 
-	ret = t4_sge_alloc_ofld_txq(adap, &txq->q, dev, cmd, iqid);
+	ret = t4_sge_alloc_ofld_txq(adap, &txq->q, dev, cmd, iqid, group);
 	if (ret)
 		return ret;
 
@@ -4852,6 +4854,7 @@ int t4_sge_alloc_uld_txq(struct adapter *adap, struct sge_uld_txq *txq,
 	skb_queue_head_init(&txq->sendq);
 	tasklet_setup(&txq->qresume_tsk, restart_ofldq);
 	txq->full = 0;
+	txq->tid_qid_group_id = group;
 	txq->mapping_err = 0;
 	return 0;
 }
@@ -4861,7 +4864,8 @@ int t4_sge_alloc_ethofld_txq(struct adapter *adap, struct sge_eohw_txq *txq,
 {
 	int ret;
 
-	ret = t4_sge_alloc_ofld_txq(adap, &txq->q, dev, FW_EQ_OFLD_CMD, iqid);
+	ret = t4_sge_alloc_ofld_txq(adap, &txq->q, dev, FW_EQ_OFLD_CMD, iqid,
+				    0);
 	if (ret)
 		return ret;
 

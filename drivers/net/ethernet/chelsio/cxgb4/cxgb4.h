@@ -903,6 +903,7 @@ struct sge_uld_txq {               /* state for an SGE offload Tx queue */
 	struct tasklet_struct qresume_tsk; /* restarts the queue */
 	bool service_ofldq_running; /* service_ofldq() is processing sendq */
 	u8 full;                    /* the Tx ring is full */
+	u8 tid_qid_group_id;        /* uP core group of the queue */
 	unsigned long mapping_err;  /* # of I/O MMU packet mapping errors */
 } ____cacheline_aligned_in_smp;
 
@@ -928,6 +929,7 @@ struct sge_uld_txq_info {
 	struct sge_uld_txq *uldtxq; /* Txq's for ULD */
 	atomic_t users;		/* num users */
 	u16 ntxq;		/* # of egress uld queues */
+	atomic_t *tid_qid_rr;	/* per port, per core group round robin */
 };
 
 /* struct to maintain ULD list to reallocate ULD resources on hotplug */
@@ -1503,6 +1505,40 @@ struct filter_entry {
 	struct ch_filter_specification fs;
 };
 
+/* Number of uP core groups TIDs are distributed over; 1 when TID based
+ * queue selection is not in use (T4 - T6, or T7 with a single core).
+ */
+static inline unsigned int cxgb4_tid_qid_ngroups(const struct adapter *adap)
+{
+	if (!adap->params.tid_qid_sel_mask)
+		return 1;
+	return (adap->params.tid_qid_sel_mask >>
+		adap->params.tid_qid_sel_shift) + 1;
+}
+
+/* Core group owning @tid; TID bound work requests must be sent on an
+ * egress queue allocated in this group.
+ */
+static inline unsigned int cxgb4_tid_qid_group(const struct adapter *adap,
+					       u32 tid)
+{
+	return (tid & adap->params.tid_qid_sel_mask) >>
+	       adap->params.tid_qid_sel_shift;
+}
+
+/* Control queue for a work request carrying @tid on @port. Control
+ * queues are allocated num_up_cores per port, queue k of a port being in
+ * core group k.
+ */
+static inline u16 cxgb4_tid_ctrlq_idx(const struct adapter *adap,
+				      unsigned int port, u32 tid)
+{
+	if (port >= adap->params.nports)
+		port = 0;
+	return port * adap->params.num_up_cores +
+	       cxgb4_tid_qid_group(adap, tid);
+}
+
 static inline int is_offload(const struct adapter *adap)
 {
 	return adap->params.offload;
@@ -1662,7 +1698,7 @@ int t4_sge_mod_ctrl_txq(struct adapter *adap, unsigned int eqid,
 			unsigned int cmplqid);
 int t4_sge_alloc_uld_txq(struct adapter *adap, struct sge_uld_txq *txq,
 			 struct net_device *dev, unsigned int iqid,
-			 unsigned int uld_type);
+			 unsigned int uld_type, u8 group);
 int t4_sge_alloc_ethofld_txq(struct adapter *adap, struct sge_eohw_txq *txq,
 			     struct net_device *dev, u32 iqid);
 void t4_sge_free_ethofld_txq(struct adapter *adap, struct sge_eohw_txq *txq);

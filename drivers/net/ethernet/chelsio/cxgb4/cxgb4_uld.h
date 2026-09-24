@@ -42,6 +42,7 @@
 #include <linux/atomic.h>
 #include <net/tls.h>
 #include "cxgb4.h"
+#include "t4_msg.h"
 
 #define MAX_ULD_QSETS 16
 #define MAX_ULD_NPORTS 4
@@ -296,6 +297,16 @@ int cxgb4_del_filter(struct net_device *dev, int filter_id,
 int cxgb4_get_filter_counters(struct net_device *dev, unsigned int fidx,
 			      u64 *hitcnt, u64 *bytecnt, bool hash);
 
+/* Encode the compressed filter tuple for the params field of T5 and later
+ * CPL_ACT_OPEN_REQ/CPL_ACT_OPEN_REQ6 messages.
+ */
+static inline __be64 t4_filter_tuple(unsigned int chip, u64 ntuple)
+{
+	if (CHELSIO_CHIP_VERSION(chip) >= CHELSIO_T7)
+		return cpu_to_be64(T7_FILTER_TUPLE_V(ntuple));
+	return cpu_to_be64(FILTER_TUPLE_V(ntuple));
+}
+
 static inline void set_wr_txq(struct sk_buff *skb, int prio, int queue)
 {
 	skb_set_queue_mapping(skb, (queue << 1) | prio);
@@ -433,6 +444,7 @@ struct cxgb4_lld_info {
 	unsigned short nciq;		     /* # of concentrator IQ */
 	unsigned char nchan:4;               /* # of channels */
 	unsigned char nports:4;              /* # of ports */
+	u8 num_up_cores;                     /* # of control queues per port */
 	unsigned char wr_cred;               /* WR 16-byte credits */
 	unsigned char adapter_type;          /* type of adapter */
 	unsigned char fw_api_ver;            /* FW API version */
@@ -500,6 +512,10 @@ struct cxgb4_uld_info {
 void cxgb4_uld_enable(struct adapter *adap);
 void cxgb4_register_uld(enum cxgb4_uld type, const struct cxgb4_uld_info *p);
 int cxgb4_unregister_uld(enum cxgb4_uld type);
+void cxgb4_uld_tid_ctrlq_id_sel_update(struct net_device *dev, u32 tid,
+				       u16 *ctrlq_index);
+void cxgb4_uld_tid_qid_sel_update(struct net_device *dev, enum cxgb4_uld uld,
+				  u32 tid, u16 *qid);
 int cxgb4_ofld_send(struct net_device *dev, struct sk_buff *skb);
 int cxgb4_immdata_send(struct net_device *dev, unsigned int idx,
 		       const void *src, unsigned int len);

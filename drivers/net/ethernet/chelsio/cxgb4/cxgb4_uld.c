@@ -170,6 +170,28 @@ freeout:
 	return err;
 }
 
+/* Route the completions of all control queues of @port to @cmplqid.
+ * Control queues are allocated num_up_cores per port.
+ */
+static int uld_set_ctrlq_cmplqid(struct adapter *adap, int port, u32 cmplqid)
+{
+	struct sge *s = &adap->sge;
+	int k, idx, ret = 0;
+	u32 param;
+
+	for (k = 0; k < adap->params.num_up_cores; k++) {
+		idx = port * adap->params.num_up_cores + k;
+		param = (FW_PARAMS_MNEM_V(FW_PARAMS_MNEM_DMAQ) |
+			 FW_PARAMS_PARAM_X_V(FW_PARAMS_PARAM_DMAQ_EQ_CMPLIQID_CTRL) |
+			 FW_PARAMS_PARAM_YZ_V(s->ctrlq[idx].q.cntxt_id));
+		ret = t4_set_params(adap, adap->mbox, adap->pf, 0, 1,
+				    &param, &cmplqid);
+		if (ret)
+			break;
+	}
+	return ret;
+}
+
 static int
 setup_sge_queues_uld(struct adapter *adap, unsigned int uld_type, bool lro)
 {
@@ -182,19 +204,9 @@ setup_sge_queues_uld(struct adapter *adap, unsigned int uld_type, bool lro)
 
 	/* Tell uP to route control queue completions to rdma rspq */
 	if (adap->flags & CXGB4_FULL_INIT_DONE && uld_type == CXGB4_ULD_RDMA) {
-		struct sge *s = &adap->sge;
-		unsigned int cmplqid;
-		u32 param, cmdop;
-
-		cmdop = FW_PARAMS_PARAM_DMAQ_EQ_CMPLIQID_CTRL;
-		for_each_port(adap, i) {
-			cmplqid = rxq_info->uldrxq[i].rspq.cntxt_id;
-			param = (FW_PARAMS_MNEM_V(FW_PARAMS_MNEM_DMAQ) |
-				 FW_PARAMS_PARAM_X_V(cmdop) |
-				 FW_PARAMS_PARAM_YZ_V(s->ctrlq[i].q.cntxt_id));
-			ret = t4_set_params(adap, adap->mbox, adap->pf,
-					    0, 1, &param, &cmplqid);
-		}
+		for_each_port(adap, i)
+			ret = uld_set_ctrlq_cmplqid(adap, i,
+						    rxq_info->uldrxq[i].rspq.cntxt_id);
 	}
 	return ret;
 }
@@ -214,18 +226,10 @@ static void free_sge_queues_uld(struct adapter *adap, unsigned int uld_type)
 	struct sge_uld_rxq_info *rxq_info = adap->sge.uld_rxq_info[uld_type];
 
 	if (adap->flags & CXGB4_FULL_INIT_DONE && uld_type == CXGB4_ULD_RDMA) {
-		struct sge *s = &adap->sge;
-		u32 param, cmdop, cmplqid = 0;
 		int i;
 
-		cmdop = FW_PARAMS_PARAM_DMAQ_EQ_CMPLIQID_CTRL;
-		for_each_port(adap, i) {
-			param = (FW_PARAMS_MNEM_V(FW_PARAMS_MNEM_DMAQ) |
-				 FW_PARAMS_PARAM_X_V(cmdop) |
-				 FW_PARAMS_PARAM_YZ_V(s->ctrlq[i].q.cntxt_id));
-			t4_set_params(adap, adap->mbox, adap->pf,
-				      0, 1, &param, &cmplqid);
-		}
+		for_each_port(adap, i)
+			uld_set_ctrlq_cmplqid(adap, i, 0);
 	}
 
 	if (rxq_info->nciq)
@@ -428,10 +432,15 @@ alloc_sge_txq_uld(struct adapter *adap, struct sge_uld_txq_info *txq_info,
 	j = nq / adap->params.nports;
 	for (i = 0; i < nq; i++) {
 		struct sge_uld_txq *txq = &txq_info->uldtxq[i];
+		u8 group = 0;
+
+		/* Spread the queues of each port over all uP core groups */
+		if (uld_type == CXGB4_TX_OFLD)
+			group = (i % j) % cxgb4_tid_qid_ngroups(adap);
 
 		txq->q.size = 1024;
 		err = t4_sge_alloc_uld_txq(adap, txq, adap->port[i / j],
-					   s->fw_evtq.cntxt_id, uld_type);
+					   s->fw_evtq.cntxt_id, uld_type, group);
 		if (err)
 			goto freeout;
 	}
@@ -451,6 +460,7 @@ release_sge_txq_uld(struct adapter *adap, unsigned int uld_type)
 
 	if (txq_info && atomic_dec_and_test(&txq_info->users)) {
 		free_sge_txq_uld(adap, txq_info);
+		kfree(txq_info->tid_qid_rr);
 		kfree(txq_info->uldtxq);
 		kfree(txq_info);
 		adap->sge.uld_txq_info[tx_uld_type] = NULL;
@@ -487,6 +497,9 @@ setup_sge_txq_uld(struct adapter *adap, unsigned int uld_type,
 	} else {
 		i = min_t(int, uld_info->ntxq, num_online_cpus());
 		txq_info->ntxq = roundup(i, adap->params.nports);
+		/* Each port needs at least one queue per uP core group */
+		i = cxgb4_tid_qid_ngroups(adap) * adap->params.nports;
+		txq_info->ntxq = max_t(int, txq_info->ntxq, i);
 	}
 	txq_info->uldtxq = kzalloc_objs(struct sge_uld_txq, txq_info->ntxq);
 	if (!txq_info->uldtxq) {
@@ -494,7 +507,18 @@ setup_sge_txq_uld(struct adapter *adap, unsigned int uld_type,
 		return -ENOMEM;
 	}
 
+	if (tx_uld_type == CXGB4_TX_OFLD && adap->params.tid_qid_sel_mask) {
+		i = cxgb4_tid_qid_ngroups(adap) * adap->params.nports;
+		txq_info->tid_qid_rr = kcalloc(i, sizeof(atomic_t), GFP_KERNEL);
+		if (!txq_info->tid_qid_rr) {
+			kfree(txq_info->uldtxq);
+			kfree(txq_info);
+			return -ENOMEM;
+		}
+	}
+
 	if (alloc_sge_txq_uld(adap, txq_info, tx_uld_type)) {
+		kfree(txq_info->tid_qid_rr);
 		kfree(txq_info->uldtxq);
 		kfree(txq_info);
 		return -ENOMEM;
@@ -601,6 +625,7 @@ static void uld_init(struct adapter *adap, struct cxgb4_lld_info *lld)
 	lld->mtus = adap->params.mtus;
 	lld->nchan = adap->params.nports;
 	lld->nports = adap->params.nports;
+	lld->num_up_cores = adap->params.num_up_cores;
 	lld->wr_cred = adap->params.ofldq_wr_cred;
 	lld->crypto = adap->params.crypto;
 	lld->iscsi_iolen = MAXRXDATA_G(t4_read_reg(adap, TP_PARA_REG2_A));
@@ -790,6 +815,71 @@ void cxgb4_uld_enable(struct adapter *adap)
  * Registers an upper-layer driver with this driver and notifies the ULD
  * about any presently available devices that support its type.
  */
+/**
+ * cxgb4_uld_tid_ctrlq_id_sel_update - select the control queue for a TID
+ * @dev: net device of the adapter
+ * @tid: TID the work requests will carry
+ * @ctrlq_index: in: a control queue index of the port, normally the base
+ *		 index port * num_up_cores; out: the port's control queue in
+ *		 the uP core group owning @tid
+ *
+ * Work requests carrying a TID must be sent on a control queue of the
+ * core group owning the TID. Without TID based queue selection the index
+ * is left unchanged.
+ */
+void cxgb4_uld_tid_ctrlq_id_sel_update(struct net_device *dev, u32 tid,
+				       u16 *ctrlq_index)
+{
+	struct adapter *adap = netdev2adap(dev);
+
+	if (!adap->params.tid_qid_sel_mask)
+		return;
+
+	*ctrlq_index = cxgb4_tid_ctrlq_idx(adap,
+					   *ctrlq_index / adap->params.num_up_cores,
+					   tid);
+}
+EXPORT_SYMBOL(cxgb4_uld_tid_ctrlq_id_sel_update);
+
+/**
+ * cxgb4_uld_tid_qid_sel_update - select the offload Tx queue for a TID
+ * @dev: net device of the adapter
+ * @uld: ULD type
+ * @tid: TID the work requests will carry
+ * @qid: in: an offload Tx queue index of the port; out: a Tx queue of the
+ *	 port in the uP core group owning @tid
+ *
+ * The queues of a port in the TID's core group are used round robin.
+ * Without TID based queue selection the index is left unchanged.
+ */
+void cxgb4_uld_tid_qid_sel_update(struct net_device *dev, enum cxgb4_uld uld,
+				  u32 tid, u16 *qid)
+{
+	struct adapter *adap = netdev2adap(dev);
+	struct sge_uld_txq_info *txq_info;
+	unsigned int ngroups, per_port, port, group, n;
+
+	if (!adap->params.tid_qid_sel_mask)
+		return;
+
+	txq_info = adap->sge.uld_txq_info[TX_ULD(uld)];
+	if (!txq_info || !txq_info->tid_qid_rr)
+		return;
+
+	ngroups = cxgb4_tid_qid_ngroups(adap);
+	per_port = txq_info->ntxq / adap->params.nports;
+	port = *qid / per_port;
+	if (port >= adap->params.nports)
+		port = 0;
+	group = cxgb4_tid_qid_group(adap, tid);
+
+	/* Queue i of a port is in group i % ngroups, see alloc_sge_txq_uld() */
+	n = atomic_inc_return(&txq_info->tid_qid_rr[port * ngroups + group]);
+	n %= DIV_ROUND_UP(per_port - group, ngroups);
+	*qid = port * per_port + group + n * ngroups;
+}
+EXPORT_SYMBOL(cxgb4_uld_tid_qid_sel_update);
+
 void cxgb4_register_uld(enum cxgb4_uld type,
 			const struct cxgb4_uld_info *p)
 {
