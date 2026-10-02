@@ -1081,7 +1081,7 @@ static const struct seq_operations devlog_seq_ops = {
 static int devlog_open(struct inode *inode, struct file *file)
 {
 	struct adapter *adap = inode->i_private;
-	struct devlog_params *dparams = &adap->params.devlog;
+	struct devlog_params *dparams = &adap->params.devlogs;
 	struct devlog_info *dinfo;
 	unsigned int index;
 	u32 fseqno;
