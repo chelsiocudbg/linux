@@ -1749,13 +1749,15 @@ EXPORT_SYMBOL(cxgb4_free_stid);
 
 /*
  * Populate a TID_RELEASE WR.  Caller must properly size the skb.
+ * @chan is the port whose control queues are used.
  */
-static void mk_tid_release(struct sk_buff *skb, unsigned int chan,
-			   unsigned int tid)
+static void mk_tid_release(const struct adapter *adap, struct sk_buff *skb,
+			   unsigned int chan, unsigned int tid)
 {
 	struct cpl_tid_release *req;
 
-	set_wr_txq(skb, CPL_PRIORITY_SETUP, chan);
+	set_wr_txq(skb, CPL_PRIORITY_SETUP,
+		   cxgb4_tid_ctrlq_idx(adap, chan, tid));
 	req = __skb_put(skb, sizeof(*req));
 	INIT_TP_WR(req, tid);
 	OPCODE_TID(req) = htonl(MK_OPCODE_TID(CPL_TID_RELEASE, tid));
@@ -1806,7 +1808,7 @@ static void process_tid_release_list(struct work_struct *work)
 					 GFP_KERNEL)))
 			schedule_timeout_uninterruptible(1);
 
-		mk_tid_release(skb, chan, p - adap->tids.tid_tab);
+		mk_tid_release(adap, skb, chan, p - adap->tids.tid_tab);
 		t4_ofld_send(adap, skb);
 		spin_lock_bh(&adap->tid_release_lock);
 	}
@@ -1847,7 +1849,7 @@ void cxgb4_remove_tid(struct tid_info *t, unsigned int chan, unsigned int tid,
 
 	skb = alloc_skb(sizeof(struct cpl_tid_release), GFP_ATOMIC);
 	if (likely(skb)) {
-		mk_tid_release(skb, chan, tid);
+		mk_tid_release(adap, skb, chan, tid);
 		t4_ofld_send(adap, skb);
 	} else
 		cxgb4_queue_tid_release(t, chan, tid);
@@ -5452,6 +5454,21 @@ static int adap_init0(struct adapter *adap, int vpd_skip)
 		adap->vres.ddp.start = val[3];
 		adap->vres.ddp.size = val[4] - val[3] + 1;
 		adap->params.ofldq_wr_cred = val[5];
+
+		/* On T7 with multiple uP cores, each TID is owned by one core
+		 * group and TID bound work requests must be sent on an egress
+		 * queue of that group.
+		 */
+		if (CHELSIO_CHIP_VERSION(adap->params.chip) >= CHELSIO_T7 &&
+		    adap->params.num_up_cores > 1) {
+			params[0] = FW_PARAM_DEV(TID_QID_SEL_MASK);
+			ret = t4_query_params(adap, adap->mbox, adap->pf, 0, 1,
+					      params, val);
+			if (!ret && val[0]) {
+				adap->params.tid_qid_sel_mask = val[0];
+				adap->params.tid_qid_sel_shift = ffs(val[0]) - 1;
+			}
+		}
 
 		if (caps_cmd.niccaps & htons(FW_CAPS_CONFIG_NIC_HASHFILTER)) {
 			init_hash_filter(adap);

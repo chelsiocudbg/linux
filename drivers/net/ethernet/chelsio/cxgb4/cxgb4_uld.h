@@ -433,6 +433,7 @@ struct cxgb4_lld_info {
 	unsigned short nciq;		     /* # of concentrator IQ */
 	unsigned char nchan:4;               /* # of channels */
 	unsigned char nports:4;              /* # of ports */
+	u8 num_up_cores;                     /* # of control queues per port */
 	unsigned char wr_cred;               /* WR 16-byte credits */
 	unsigned char adapter_type;          /* type of adapter */
 	unsigned char fw_api_ver;            /* FW API version */
@@ -500,6 +501,10 @@ struct cxgb4_uld_info {
 void cxgb4_uld_enable(struct adapter *adap);
 void cxgb4_register_uld(enum cxgb4_uld type, const struct cxgb4_uld_info *p);
 int cxgb4_unregister_uld(enum cxgb4_uld type);
+void cxgb4_uld_tid_ctrlq_id_sel_update(struct net_device *dev, u32 tid,
+				       u16 *ctrlq_index);
+void cxgb4_uld_tid_qid_sel_update(struct net_device *dev, enum cxgb4_uld uld,
+				  u32 tid, u16 *qid);
 int cxgb4_ofld_send(struct net_device *dev, struct sk_buff *skb);
 int cxgb4_immdata_send(struct net_device *dev, unsigned int idx,
 		       const void *src, unsigned int len);
