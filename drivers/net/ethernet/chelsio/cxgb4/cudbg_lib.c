@@ -198,7 +198,7 @@ u32 cudbg_get_entity_length(struct adapter *adap, u32 entity)
 		}
 		break;
 	case CUDBG_DEV_LOG:
-		len = adap->params.devlog.size;
+		len = adap->params.devlogs.size;
 		break;
 	case CUDBG_CIM_LA:
 		if (is_t6(adap->params.chip)) {
@@ -847,7 +847,7 @@ int cudbg_collect_fw_devlog(struct cudbg_init *pdbg_init,
 		return rc;
 	}
 
-	dparams = &padap->params.devlog;
+	dparams = &padap->params.devlogs;
 	rc = cudbg_get_buff(pdbg_init, dbg_buff, dparams->size, &temp_buff);
 	if (rc)
 		return rc;
