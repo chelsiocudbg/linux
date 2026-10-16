@@ -57,14 +57,13 @@
  */
 bool cxgb4_ptp_is_ptp_tx(struct sk_buff *skb)
 {
-	struct udphdr *uh;
+	unsigned int ptp_class;
 
-	uh = udp_hdr(skb);
-	return skb->len >= PTP_MIN_LENGTH &&
-		skb->len <= PTP_IN_TRANSMIT_PACKET_MAXNUM &&
-		likely(skb->protocol == htons(ETH_P_IP)) &&
-		ip_hdr(skb)->protocol == IPPROTO_UDP &&
-		uh->dest == htons(PTP_EVENT_PORT);
+	ptp_class = ptp_classify_raw(skb);
+	if (ptp_class == PTP_CLASS_NONE)
+		return false;
+
+	return true;
 }
 
 bool is_ptp_enabled(struct sk_buff *skb, struct net_device *dev)
@@ -83,11 +82,50 @@ bool is_ptp_enabled(struct sk_buff *skb, struct net_device *dev)
  */
 bool cxgb4_ptp_is_ptp_rx(struct sk_buff *skb)
 {
-	struct udphdr *uh = (struct udphdr *)(skb->data + ETH_HLEN +
-					      IPV4_HLEN(skb->data));
+	int offset = ETH_HLEN;
+	struct ethhdr *eth;
+	__be16 proto;
 
-	return  uh->dest == htons(PTP_EVENT_PORT) &&
-		uh->source == htons(PTP_EVENT_PORT);
+	if (skb->len < ETH_HLEN)
+		return false;
+
+	eth = (struct ethhdr *)skb->data;
+	proto = eth->h_proto;
+
+	if (proto == htons(ETH_P_8021Q)) {
+		struct vlan_hdr *vhdr;
+
+		if (skb->len < offset + VLAN_HLEN)
+			return false;
+
+		vhdr = (struct vlan_hdr *)(skb->data + offset);
+		proto = vhdr->h_vlan_encapsulated_proto;
+		offset += VLAN_HLEN;
+	}
+
+	if (proto == htons(ETH_P_1588))
+		return true;
+
+	if (proto == htons(ETH_P_IP)) {
+		struct iphdr *iph;
+		struct udphdr *uh;
+
+		if (skb->len < offset + sizeof(*iph))
+			return false;
+		iph = (struct iphdr *)(skb->data + offset);
+
+		if (iph->protocol != IPPROTO_UDP)
+			return false;
+		offset += (iph->ihl * 4);
+
+		if (skb->len < offset + sizeof(*uh))
+			return false;
+		uh = (struct udphdr *)(skb->data + offset);
+
+		return uh->dest == htons(PTP_EVENT_PORT);
+	}
+
+	return false;
 }
 
 /**
@@ -103,12 +141,11 @@ void cxgb4_ptp_read_hwstamp(struct adapter *adapter, struct port_info *pi)
 
 	skb_ts = skb_hwtstamps(adapter->ptp_tx_skb);
 
-	tx_ts = t4_read_reg(adapter,
-			    T5_PORT_REG(pi->port_id, MAC_PORT_TX_TS_VAL_LO));
+	if (CHELSIO_CHIP_VERSION(adapter->params.chip) >= CHELSIO_T7)
+		tx_ts = t4_read_reg64(adapter, T7_PORT_REG(pi->lport, T7_MAC_PORT_TX_TS_VAL_LO));
+	else
+		tx_ts = t4_read_reg64(adapter, T5_PORT_REG(pi->lport, MAC_PORT_TX_TS_VAL_LO));
 
-	tx_ts |= (u64)t4_read_reg(adapter,
-				  T5_PORT_REG(pi->port_id,
-					      MAC_PORT_TX_TS_VAL_HI)) << 32;
 	skb_ts->hwtstamp = ns_to_ktime(tx_ts);
 	skb_tstamp_tx(adapter->ptp_tx_skb, skb_ts);
 	dev_kfree_skb_any(adapter->ptp_tx_skb);
@@ -183,7 +220,7 @@ int cxgb4_ptp_redirect_rx_packet(struct adapter *adapter, struct port_info *pi)
 
 	c.retval_len16 = cpu_to_be32(FW_CMD_LEN16_V(sizeof(c) / 16));
 	c.u.init.sc = FW_PTP_SC_RDRX_TYPE;
-	c.u.init.txchan = pi->tx_chan;
+	c.u.init.txchan = pi->lport;
 	c.u.init.absid = cpu_to_be16(receive_q->rspq.abs_id);
 
 	err = t4_wr_mbox(adapter, adapter->mbox, &c, sizeof(c), NULL);
@@ -319,9 +356,10 @@ static int cxgb4_ptp_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 					       ptp_clock_info);
 	u64 ns;
 
-	ns = t4_read_reg(adapter, T5_PORT_REG(0, MAC_PORT_PTP_SUM_LO_A));
-	ns |= (u64)t4_read_reg(adapter,
-			       T5_PORT_REG(0, MAC_PORT_PTP_SUM_HI_A)) << 32;
+	if (CHELSIO_CHIP_VERSION(adapter->params.chip) >= CHELSIO_T7)
+		ns = t4_read_reg64(adapter, MAC_PTP_SUM_LO_A);
+	else
+		ns = t4_read_reg64(adapter, T5_PORT_REG(0, MAC_PORT_PTP_SUM_LO_A));
 
 	/* convert to timespec*/
 	*ts = ns_to_timespec64(ns);
@@ -432,7 +470,7 @@ void cxgb4_ptp_init(struct adapter *adapter)
 	spin_lock_init(&adapter->ptp_lock);
 
 	adapter->ptp_clock = ptp_clock_register(&adapter->ptp_clock_info,
-						&adapter->pdev->dev);
+						adapter->pdev_dev);
 	if (IS_ERR_OR_NULL(adapter->ptp_clock)) {
 		adapter->ptp_clock = NULL;
 		dev_err(adapter->pdev_dev,

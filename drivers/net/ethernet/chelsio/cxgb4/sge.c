@@ -3483,7 +3483,8 @@ static void do_gro(struct sge_eth_rxq *rxq, const struct pkt_gl *gl,
 enum {
 	RX_NON_PTP_PKT = 0,
 	RX_PTP_PKT_SUC = 1,
-	RX_PTP_PKT_ERR = 2
+	RX_PTP_PKT_ERR = 2,
+	RX_PTP_PKT_T7 = 3
 };
 
 /**
@@ -3509,6 +3510,13 @@ static noinline int t4_systim_to_hwstamp(struct adapter *adapter,
 
 	data = skb->data + sizeof(*cpl);
 	skb_pull(skb, 2 * sizeof(u64) + sizeof(struct cpl_rx_mps_pkt));
+
+	if (CHELSIO_CHIP_VERSION(adapter->params.chip) == CHELSIO_T7) {
+		struct ethhdr *eth = (struct ethhdr *)skb->data;
+
+		if (ether_addr_equal(eth->h_source, eth->h_dest))
+			return RX_PTP_PKT_T7;
+	}
 	offset = ETH_HLEN + IPV4_HLEN(skb->data) + UDP_HLEN;
 	if (skb->len < offset + OFF_PTP_SEQUENCE_ID + sizeof(short))
 		return RX_PTP_PKT_ERR;
@@ -3740,8 +3748,7 @@ int t4_ethrx_handler(struct sge_rspq *q, const __be64 *rsp,
 		__skb_pull(skb, s->pktshift); /* remove ethernet header pad */
 
 	/* Handle the PTP Event Tx Loopback packet */
-	if (unlikely(pi->ptp_enable && !ret &&
-		     (pkt->l2info & htonl(RXF_UDP_F)) &&
+	if (unlikely(pi->ptp_enable && (ret == RX_PTP_PKT_T7 || !ret) &&
 		     cxgb4_ptp_is_ptp_rx(skb))) {
 		if (!t4_tx_hststamp(adapter, skb, q->netdev))
 			return 0;
